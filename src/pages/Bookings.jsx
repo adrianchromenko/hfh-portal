@@ -1,12 +1,10 @@
 import { useState, useEffect } from 'react'
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore'
 import { db } from '../firebase'
-import { format } from 'date-fns'
+import { format, isToday, isTomorrow, isYesterday, parseISO } from 'date-fns'
 import {
   Search,
-  Filter,
   ChevronDown,
-  MoreVertical,
   MapPin,
   Phone,
   Mail,
@@ -15,9 +13,9 @@ import {
   Package,
   FileText,
   X,
-  Check,
   Trash2,
-  Eye
+  Eye,
+  ChevronRight
 } from 'lucide-react'
 import StatusBadge from '../components/StatusBadge'
 
@@ -26,11 +24,12 @@ const statusOptions = ['all', 'pending', 'confirmed', 'completed', 'cancelled']
 export default function Bookings() {
   const [bookings, setBookings] = useState([])
   const [filteredBookings, setFilteredBookings] = useState([])
+  const [groupedBookings, setGroupedBookings] = useState({})
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [selectedBooking, setSelectedBooking] = useState(null)
-  const [showFilters, setShowFilters] = useState(false)
+  const [collapsedDates, setCollapsedDates] = useState({})
 
   useEffect(() => {
     const bookingsRef = collection(db, 'bookings')
@@ -70,7 +69,38 @@ export default function Bookings() {
     }
 
     setFilteredBookings(filtered)
+
+    // Group by date
+    const grouped = {}
+    filtered.forEach((booking) => {
+      const dateKey = booking.date || 'No Date'
+      if (!grouped[dateKey]) {
+        grouped[dateKey] = []
+      }
+      grouped[dateKey].push(booking)
+    })
+
+    // Sort bookings within each date by time
+    Object.keys(grouped).forEach((date) => {
+      grouped[date].sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+    })
+
+    setGroupedBookings(grouped)
   }, [bookings, searchTerm, statusFilter])
+
+  // Sort dates (most recent first, but "No Date" at the end)
+  const sortedDates = Object.keys(groupedBookings).sort((a, b) => {
+    if (a === 'No Date') return 1
+    if (b === 'No Date') return -1
+    return new Date(b) - new Date(a)
+  })
+
+  const toggleDateCollapse = (date) => {
+    setCollapsedDates((prev) => ({
+      ...prev,
+      [date]: !prev[date]
+    }))
+  }
 
   async function updateBookingStatus(bookingId, newStatus) {
     try {
@@ -93,6 +123,33 @@ export default function Bookings() {
     }
   }
 
+  function formatDateHeader(dateStr) {
+    if (dateStr === 'No Date') return 'No Date Specified'
+
+    try {
+      const date = new Date(dateStr)
+      if (isToday(date)) return `Today - ${format(date, 'EEEE, MMMM d, yyyy')}`
+      if (isTomorrow(date)) return `Tomorrow - ${format(date, 'EEEE, MMMM d, yyyy')}`
+      if (isYesterday(date)) return `Yesterday - ${format(date, 'EEEE, MMMM d, yyyy')}`
+      return format(date, 'EEEE, MMMM d, yyyy')
+    } catch {
+      return dateStr
+    }
+  }
+
+  function getDateBadgeColor(dateStr) {
+    if (dateStr === 'No Date') return 'bg-gray-100 text-gray-600'
+    try {
+      const date = new Date(dateStr)
+      if (isToday(date)) return 'bg-green-100 text-green-700'
+      if (isTomorrow(date)) return 'bg-blue-100 text-blue-700'
+      if (date < new Date()) return 'bg-gray-100 text-gray-600'
+      return 'bg-purple-100 text-purple-700'
+    } catch {
+      return 'bg-gray-100 text-gray-600'
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -108,6 +165,7 @@ export default function Bookings() {
           <h1 className="text-2xl font-bold text-gray-900">Bookings</h1>
           <p className="text-gray-500">
             {filteredBookings.length} booking{filteredBookings.length !== 1 ? 's' : ''} found
+            {sortedDates.length > 0 && ` across ${sortedDates.length} date${sortedDates.length !== 1 ? 's' : ''}`}
           </p>
         </div>
       </div>
@@ -145,61 +203,100 @@ export default function Bookings() {
         </div>
       </div>
 
-      {/* Bookings List */}
+      {/* Bookings List Grouped by Date */}
       {filteredBookings.length === 0 ? (
         <div className="card text-center py-12">
           <Package className="h-12 w-12 mx-auto mb-4 text-gray-300" />
           <p className="text-gray-500">No bookings found</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {filteredBookings.map((booking) => (
-            <div
-              key={booking.id}
-              className="card hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() => setSelectedBooking(booking)}
-            >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="font-semibold text-gray-900">{booking.name}</h3>
-                    <StatusBadge status={booking.status} />
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-sm text-gray-500">
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-4 w-4" />
-                      {booking.date
-                        ? format(new Date(booking.date), 'MMM d, yyyy')
-                        : 'No date'}
+        <div className="space-y-6">
+          {sortedDates.map((date) => {
+            const dateBookings = groupedBookings[date]
+            const isCollapsed = collapsedDates[date]
+            const pendingCount = dateBookings.filter((b) => b.status === 'pending').length
+            const confirmedCount = dateBookings.filter((b) => b.status === 'confirmed').length
+
+            return (
+              <div key={date} className="space-y-3">
+                {/* Date Header */}
+                <button
+                  onClick={() => toggleDateCollapse(date)}
+                  className="w-full flex items-center justify-between p-4 bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${getDateBadgeColor(date)}`}>
+                      <Calendar className="h-5 w-5" />
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Clock className="h-4 w-4" />
-                      {booking.time ? formatTime(booking.time) : 'No time'}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <MapPin className="h-4 w-4" />
-                      {booking.city}, {booking.state}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Phone className="h-4 w-4" />
-                      {booking.phone}
+                    <div className="text-left">
+                      <h3 className="font-semibold text-gray-900">{formatDateHeader(date)}</h3>
+                      <p className="text-sm text-gray-500">
+                        {dateBookings.length} pickup{dateBookings.length !== 1 ? 's' : ''}
+                        {pendingCount > 0 && (
+                          <span className="ml-2 text-orange-600">• {pendingCount} pending</span>
+                        )}
+                        {confirmedCount > 0 && (
+                          <span className="ml-2 text-green-600">• {confirmedCount} confirmed</span>
+                        )}
+                      </p>
                     </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setSelectedBooking(booking)
-                    }}
-                    className="p-2 hover:bg-gray-100 rounded-lg"
-                  >
-                    <Eye className="h-5 w-5 text-gray-500" />
-                  </button>
-                </div>
+                  <ChevronRight
+                    className={`h-5 w-5 text-gray-400 transition-transform ${
+                      isCollapsed ? '' : 'rotate-90'
+                    }`}
+                  />
+                </button>
+
+                {/* Bookings for this date */}
+                {!isCollapsed && (
+                  <div className="space-y-3 pl-4 border-l-2 border-gray-200 ml-6">
+                    {dateBookings.map((booking) => (
+                      <div
+                        key={booking.id}
+                        className="card hover:shadow-md transition-shadow cursor-pointer"
+                        onClick={() => setSelectedBooking(booking)}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <h3 className="font-semibold text-gray-900">{booking.name}</h3>
+                              <StatusBadge status={booking.status} />
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm text-gray-500">
+                              <div className="flex items-center gap-1">
+                                <Clock className="h-4 w-4" />
+                                {booking.time ? formatTime(booking.time) : 'No time'}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <MapPin className="h-4 w-4" />
+                                {booking.city}, {booking.state}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Phone className="h-4 w-4" />
+                                {booking.phone}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSelectedBooking(booking)
+                              }}
+                              className="p-2 hover:bg-gray-100 rounded-lg"
+                            >
+                              <Eye className="h-5 w-5 text-gray-500" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
