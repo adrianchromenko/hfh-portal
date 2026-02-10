@@ -130,17 +130,23 @@ export default function CalendarView({ bookings, onUpdateStatus, onApprove, onDe
                 key={day.toISOString()}
                 onClick={() => handleDateClick(day)}
                 className={`
-                  bg-white min-h-[80px] p-2 cursor-pointer transition-all
+                  min-h-[80px] p-2 cursor-pointer transition-all relative
                   ${!isCurrentMonth ? 'opacity-40' : ''}
-                  ${isToday(day) ? 'bg-blue-50' : ''}
-                  ${isSelectedDay ? 'ring-2 ring-habitat-green' : ''}
-                  ${dateBookings.length > 0 ? 'hover:bg-gray-50' : ''}
+                  ${isToday(day) ? 'bg-blue-100 ring-2 ring-blue-500 ring-inset' : 'bg-white'}
+                  ${isSelectedDay && !isToday(day) ? 'ring-2 ring-habitat-green' : ''}
+                  ${dateBookings.length > 0 && !isToday(day) ? 'hover:bg-gray-50' : ''}
+                  ${dateBookings.length > 0 && isToday(day) ? 'hover:bg-blue-200' : ''}
                 `}
               >
+                {isToday(day) && (
+                  <div className="absolute top-1 right-1 bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full font-medium">
+                    Today
+                  </div>
+                )}
                 <div className="flex flex-col h-full">
                   <span className={`
-                    text-sm font-medium
-                    ${isToday(day) ? 'text-blue-600' : 'text-gray-900'}
+                    text-sm font-bold
+                    ${isToday(day) ? 'text-blue-700' : 'font-medium text-gray-900'}
                   `}>
                     {format(day, 'd')}
                   </span>
