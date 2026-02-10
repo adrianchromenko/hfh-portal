@@ -18,10 +18,12 @@ import {
   ChevronRight,
   Image,
   List,
-  CalendarDays
+  CalendarDays,
+  Plus
 } from 'lucide-react'
 import StatusBadge from '../components/StatusBadge'
 import CalendarView from '../components/CalendarView'
+import AddBookingModal from '../components/AddBookingModal'
 import { sendApprovalEmail, sendDenialEmail, generateApprovalEmailLink, generateDenialEmailLink } from '../services/emailService'
 
 const statusOptions = ['all', 'pending', 'confirmed', 'completed', 'cancelled']
@@ -36,6 +38,7 @@ export default function Bookings() {
   const [selectedBooking, setSelectedBooking] = useState(null)
   const [collapsedDates, setCollapsedDates] = useState({})
   const [viewMode, setViewMode] = useState('list') // 'list' or 'calendar'
+  const [showAddModal, setShowAddModal] = useState(false)
 
   useEffect(() => {
     const bookingsRef = collection(db, 'bookings')
@@ -222,8 +225,17 @@ export default function Bookings() {
             {viewMode === 'list' && sortedDates.length > 0 && ` across ${sortedDates.length} date${sortedDates.length !== 1 ? 's' : ''}`}
           </p>
         </div>
-        {/* View Mode Toggle */}
-        <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg">
+        <div className="flex items-center gap-3">
+          {/* Add Booking Button */}
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            Add Booking
+          </button>
+          {/* View Mode Toggle */}
+          <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg">
           <button
             onClick={() => setViewMode('list')}
             className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -246,6 +258,7 @@ export default function Bookings() {
             <CalendarDays className="h-4 w-4" />
             Calendar
           </button>
+          </div>
         </div>
       </div>
 
@@ -396,6 +409,13 @@ export default function Bookings() {
           onClose={() => setSelectedBooking(null)}
           onUpdateStatus={updateBookingStatus}
           onDelete={deleteBooking}
+        />
+      )}
+
+      {/* Add Booking Modal */}
+      {showAddModal && (
+        <AddBookingModal
+          onClose={() => setShowAddModal(false)}
         />
       )}
     </div>
