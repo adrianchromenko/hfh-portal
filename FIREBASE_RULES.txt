@@ -1,0 +1,62 @@
+// Updated Firebase Firestore Rules
+// Copy and paste these rules into your Firebase Console > Firestore Database > Rules
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Bookings collection
+    match /bookings/{bookingId} {
+      // Anyone can create a booking (public form)
+      allow create: if true;
+      
+      // Only authenticated users can read, update, delete (admin dashboard)
+      allow read, update, delete: if request.auth != null;
+    }
+    
+    // Users collection - NEW
+    match /users/{userId} {
+      // Only authenticated users can read users list
+      allow read: if request.auth != null;
+      
+      // Only authenticated users can create, update, or delete users
+      // In production, you might want to restrict this to admin role only:
+      // allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow create, update, delete: if request.auth != null;
+    }
+  }
+}
+
+// NOTE: For production, you should implement role-based access control:
+// 1. Store user roles in the users collection
+// 2. Check if the current user has admin role before allowing user management
+// 3. Example enhanced rules:
+/*
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Bookings collection
+    match /bookings/{bookingId} {
+      allow create: if true;
+      allow read: if request.auth != null;
+      allow update, delete: if request.auth != null;
+    }
+    
+    // Users collection - Admin only
+    match /users/{userId} {
+      // Users can read their own profile
+      allow read: if request.auth != null && 
+        (request.auth.uid == userId || isAdmin());
+      
+      // Only admins can manage users
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}
+*/
