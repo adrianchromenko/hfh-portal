@@ -16,9 +16,13 @@ import {
   Trash2,
   Eye,
   ChevronRight,
-  Image
+  Image,
+  List,
+  CalendarDays
 } from 'lucide-react'
 import StatusBadge from '../components/StatusBadge'
+import CalendarView from '../components/CalendarView'
+import { sendApprovalEmail, sendDenialEmail, generateApprovalEmailLink, generateDenialEmailLink } from '../services/emailService'
 
 const statusOptions = ['all', 'pending', 'confirmed', 'completed', 'cancelled']
 
@@ -31,6 +35,7 @@ export default function Bookings() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [selectedBooking, setSelectedBooking] = useState(null)
   const [collapsedDates, setCollapsedDates] = useState({})
+  const [viewMode, setViewMode] = useState('list') // 'list' or 'calendar'
 
   useEffect(() => {
     const bookingsRef = collection(db, 'bookings')
@@ -124,6 +129,54 @@ export default function Bookings() {
     }
   }
 
+  async function approveBooking(booking) {
+    try {
+      // Update status in database
+      await updateDoc(doc(db, 'bookings', booking.id), {
+        status: 'confirmed',
+        updatedAt: new Date(),
+        approvedAt: new Date()
+      })
+
+      // Try to send email (will fall back to mailto if EmailJS not configured)
+      const emailSent = await sendApprovalEmail(booking)
+      
+      if (!emailSent && booking.email) {
+        // Fallback to mailto link
+        window.location.href = generateApprovalEmailLink(booking)
+      }
+
+      alert(`Pickup approved for ${booking.name}. ${emailSent ? 'Email sent!' : 'Please send the email manually.'}`)
+    } catch (error) {
+      console.error('Error approving booking:', error)
+      alert('Error approving booking. Please try again.')
+    }
+  }
+
+  async function denyBooking(booking) {
+    try {
+      // Update status in database
+      await updateDoc(doc(db, 'bookings', booking.id), {
+        status: 'cancelled',
+        updatedAt: new Date(),
+        deniedAt: new Date()
+      })
+
+      // Try to send email (will fall back to mailto if EmailJS not configured)
+      const emailSent = await sendDenialEmail(booking)
+      
+      if (!emailSent && booking.email) {
+        // Fallback to mailto link
+        window.location.href = generateDenialEmailLink(booking)
+      }
+
+      alert(`Pickup denied for ${booking.name}. ${emailSent ? 'Email sent!' : 'Please send the email manually.'}`)
+    } catch (error) {
+      console.error('Error denying booking:', error)
+      alert('Error denying booking. Please try again.')
+    }
+  }
+
   function formatDateHeader(dateStr) {
     if (dateStr === 'No Date') return 'No Date Specified'
 
@@ -166,8 +219,33 @@ export default function Bookings() {
           <h1 className="text-2xl font-bold text-gray-900">Bookings</h1>
           <p className="text-gray-500">
             {filteredBookings.length} booking{filteredBookings.length !== 1 ? 's' : ''} found
-            {sortedDates.length > 0 && ` across ${sortedDates.length} date${sortedDates.length !== 1 ? 's' : ''}`}
+            {viewMode === 'list' && sortedDates.length > 0 && ` across ${sortedDates.length} date${sortedDates.length !== 1 ? 's' : ''}`}
           </p>
+        </div>
+        {/* View Mode Toggle */}
+        <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg">
+          <button
+            onClick={() => setViewMode('list')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              viewMode === 'list'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <List className="h-4 w-4" />
+            List
+          </button>
+          <button
+            onClick={() => setViewMode('calendar')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              viewMode === 'calendar'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <CalendarDays className="h-4 w-4" />
+            Calendar
+          </button>
         </div>
       </div>
 
@@ -204,13 +282,22 @@ export default function Bookings() {
         </div>
       </div>
 
-      {/* Bookings List Grouped by Date */}
-      {filteredBookings.length === 0 ? (
-        <div className="card text-center py-12">
-          <Package className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-          <p className="text-gray-500">No bookings found</p>
-        </div>
+      {/* Conditional Rendering: List View or Calendar View */}
+      {viewMode === 'calendar' ? (
+        <CalendarView
+          bookings={filteredBookings}
+          onUpdateStatus={updateBookingStatus}
+          onApprove={approveBooking}
+          onDeny={denyBooking}
+        />
       ) : (
+        // List View
+        filteredBookings.length === 0 ? (
+          <div className="card text-center py-12">
+            <Package className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+            <p className="text-gray-500">No bookings found</p>
+          </div>
+        ) : (
         <div className="space-y-6">
           {sortedDates.map((date) => {
             const dateBookings = groupedBookings[date]
@@ -299,6 +386,7 @@ export default function Bookings() {
             )
           })}
         </div>
+      )
       )}
 
       {/* Booking Detail Modal */}
