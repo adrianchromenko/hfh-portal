@@ -53,7 +53,7 @@ export default function Dashboard() {
 
       snapshot.forEach((doc) => {
         const data = { id: doc.id, ...doc.data() }
-        const bookingDate = data.date ? new Date(data.date) : null
+        const bookingDate = data.date ? new Date(data.date + 'T12:00:00') : null
 
         // Count stats
         if (bookingDate) {
@@ -359,7 +359,7 @@ export default function Dashboard() {
                     <p className="font-medium text-gray-900">{booking.name}</p>
                     <p className="text-sm text-gray-500">
                       {booking.date
-                        ? format(new Date(booking.date), 'MMM d, yyyy')
+                        ? format(new Date(booking.date + 'T12:00:00'), 'MMM d, yyyy')
                         : 'No date'}{' '}
                       - {booking.items?.substring(0, 30)}
                       {booking.items?.length > 30 ? '...' : ''}

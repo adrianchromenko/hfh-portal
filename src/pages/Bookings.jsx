@@ -128,7 +128,7 @@ export default function Bookings() {
     if (dateStr === 'No Date') return 'No Date Specified'
 
     try {
-      const date = new Date(dateStr)
+      const date = new Date(dateStr + 'T12:00:00')
       if (isToday(date)) return `Today - ${format(date, 'EEEE, MMMM d, yyyy')}`
       if (isTomorrow(date)) return `Tomorrow - ${format(date, 'EEEE, MMMM d, yyyy')}`
       if (isYesterday(date)) return `Yesterday - ${format(date, 'EEEE, MMMM d, yyyy')}`
@@ -141,7 +141,7 @@ export default function Bookings() {
   function getDateBadgeColor(dateStr) {
     if (dateStr === 'No Date') return 'bg-gray-100 text-gray-600'
     try {
-      const date = new Date(dateStr)
+      const date = new Date(dateStr + 'T12:00:00')
       if (isToday(date)) return 'bg-green-100 text-green-700'
       if (isTomorrow(date)) return 'bg-blue-100 text-blue-700'
       if (date < new Date()) return 'bg-gray-100 text-gray-600'
@@ -397,7 +397,7 @@ function BookingModal({ booking, onClose, onUpdateStatus, onDelete }) {
                   <p className="text-xs text-gray-500">Date</p>
                   <p className="font-medium">
                     {booking.date
-                      ? format(new Date(booking.date), 'EEEE, MMMM d, yyyy')
+                      ? format(new Date(booking.date + 'T12:00:00'), 'EEEE, MMMM d, yyyy')
                       : 'Not set'}
                   </p>
                 </div>
