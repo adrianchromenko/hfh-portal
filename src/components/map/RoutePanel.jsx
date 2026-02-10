@@ -36,24 +36,35 @@ export default function RoutePanel({
           </span>
         </div>
 
-        {/* Optimize button */}
-        <button
-          onClick={onOptimize}
-          disabled={isOptimizing || geocodedStops.length < 2}
-          className="w-full btn-primary flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isOptimizing ? (
-            <>
-              <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-              Optimizing...
-            </>
-          ) : (
-            <>
-              <Navigation className="h-4 w-4" />
-              Optimize Route
-            </>
+        {/* Action buttons */}
+        <div className="flex gap-2">
+          <button
+            onClick={onOptimize}
+            disabled={isOptimizing || geocodedStops.length < 2}
+            className="flex-1 btn-primary flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isOptimizing ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                Optimizing...
+              </>
+            ) : (
+              <>
+                <Navigation className="h-4 w-4" />
+                Optimize Route
+              </>
+            )}
+          </button>
+          {routeData && onPrint && (
+            <button
+              onClick={onPrint}
+              className="py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors flex items-center justify-center"
+              title="Print route sheet"
+            >
+              <Printer className="h-4 w-4" />
+            </button>
           )}
-        </button>
+        </div>
 
         {/* Route summary */}
         {routeData && (

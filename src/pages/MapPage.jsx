@@ -1,13 +1,14 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { collection, query, where, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { format } from 'date-fns'
-import { Plus, Loader2 } from 'lucide-react'
+import { Plus, Loader2, Printer, Download } from 'lucide-react'
 import { geocodeAddress } from '../utils/geocode'
 import { optimizeRoute, getDepot } from '../utils/routing'
 import MapView from '../components/map/MapView'
 import RoutePanel from '../components/map/RoutePanel'
 import AddStopModal from '../components/map/AddStopModal'
+import PrintRouteSheet from '../components/map/PrintRouteSheet'
 
 export default function MapPage() {
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
@@ -17,6 +18,8 @@ export default function MapPage() {
   const [routeData, setRouteData] = useState(null)
   const [isOptimizing, setIsOptimizing] = useState(false)
   const [geocodingStatus, setGeocodingStatus] = useState('')
+  const [showPrintView, setShowPrintView] = useState(false)
+  const mapRef = useRef(null)
 
   const depot = getDepot()
 
@@ -109,6 +112,20 @@ export default function MapPage() {
     // The MapView popup handles this via Leaflet
   }, [])
 
+  const handlePrint = () => {
+    setShowPrintView(true)
+    setTimeout(() => {
+      window.print()
+      setShowPrintView(false)
+    }, 500)
+  }
+
+  const handleDownloadMap = async () => {
+    // This would require a library like html2canvas or leaflet-image
+    // For now, we'll use the print function
+    alert('Use the Print button to save as PDF. In the print dialog, select "Save as PDF" as the destination.')
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -135,6 +152,16 @@ export default function MapPage() {
             onChange={(e) => setSelectedDate(e.target.value)}
             className="input-field w-auto"
           />
+          {routeData && (
+            <button
+              onClick={handlePrint}
+              className="btn-secondary flex items-center gap-2 whitespace-nowrap"
+              title="Print route sheet for drivers"
+            >
+              <Printer className="h-4 w-4" />
+              Print Route
+            </button>
+          )}
           <button
             onClick={() => setShowAddModal(true)}
             className="btn-primary flex items-center gap-2 whitespace-nowrap"
@@ -156,7 +183,7 @@ export default function MapPage() {
       {/* Map + Panel layout */}
       <div className="flex flex-col lg:flex-row gap-4" style={{ height: 'calc(100vh - 14rem)' }}>
         {/* Map */}
-        <div className="flex-1 lg:flex-[2] card p-0 overflow-hidden">
+        <div className="flex-1 lg:flex-[2] card p-0 overflow-hidden" ref={mapRef}>
           <MapView
             stops={routeData ? routeData.orderedStops : bookings}
             depot={depot}
@@ -173,6 +200,7 @@ export default function MapPage() {
             isOptimizing={isOptimizing}
             onOptimize={handleOptimize}
             onStopClick={handleStopClick}
+            onPrint={handlePrint}
           />
         </div>
       </div>
@@ -182,6 +210,16 @@ export default function MapPage() {
         <AddStopModal
           selectedDate={selectedDate}
           onClose={() => setShowAddModal(false)}
+        />
+      )}
+
+      {/* Print View */}
+      {showPrintView && (
+        <PrintRouteSheet
+          routeData={routeData}
+          stops={bookings}
+          date={selectedDate}
+          depot={depot}
         />
       )}
     </div>
