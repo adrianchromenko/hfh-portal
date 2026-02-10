@@ -13,10 +13,10 @@ import {
   subMonths,
   parseISO
 } from 'date-fns'
-import { ChevronLeft, ChevronRight, Calendar, Clock, MapPin, Phone, Mail, Check, X as XIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Calendar, Clock, MapPin, Phone, Mail, Check, X as XIcon, Trash2 } from 'lucide-react'
 import StatusBadge from './StatusBadge'
 
-export default function CalendarView({ bookings, onUpdateStatus, onApprove, onDeny }) {
+export default function CalendarView({ bookings, onUpdateStatus, onApprove, onDeny, onDelete }) {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState(null)
   const [showDayModal, setShowDayModal] = useState(false)
@@ -213,6 +213,7 @@ export default function CalendarView({ bookings, onUpdateStatus, onApprove, onDe
           onUpdateStatus={onUpdateStatus}
           onApprove={onApprove}
           onDeny={onDeny}
+          onDelete={onDelete}
           formatTime={formatTime}
         />
       )}
@@ -220,7 +221,7 @@ export default function CalendarView({ bookings, onUpdateStatus, onApprove, onDe
   )
 }
 
-function DayDetailModal({ date, bookings, onClose, onUpdateStatus, onApprove, onDeny, formatTime }) {
+function DayDetailModal({ date, bookings, onClose, onUpdateStatus, onApprove, onDeny, onDelete, formatTime }) {
   const [processingId, setProcessingId] = useState(null)
 
   const handleApprove = async (booking) => {
@@ -232,6 +233,15 @@ function DayDetailModal({ date, bookings, onClose, onUpdateStatus, onApprove, on
   const handleDeny = async (booking) => {
     setProcessingId(booking.id)
     await onDeny(booking)
+    setProcessingId(null)
+  }
+
+  const handleDelete = async (booking) => {
+    if (!confirm(`Are you sure you want to delete the booking for ${booking.name}?`)) return
+    setProcessingId(booking.id)
+    if (onDelete) {
+      await onDelete(booking.id)
+    }
     setProcessingId(null)
   }
 
@@ -352,6 +362,20 @@ function DayDetailModal({ date, bookings, onClose, onUpdateStatus, onApprove, on
                         Denied
                       </div>
                     )}
+                    {/* Delete button for all statuses */}
+                    <button
+                      onClick={() => handleDelete(booking)}
+                      disabled={processingId === booking.id}
+                      className="text-red-600 hover:text-red-700 flex items-center gap-1 text-sm"
+                      title="Delete this booking"
+                    >
+                      {processingId === booking.id ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-red-600 border-t-transparent" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                      Delete
+                    </button>
                   </div>
                 </div>
               </div>

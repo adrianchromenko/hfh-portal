@@ -302,6 +302,7 @@ export default function Bookings() {
           onUpdateStatus={updateBookingStatus}
           onApprove={approveBooking}
           onDeny={denyBooking}
+          onDelete={deleteBooking}
         />
       ) : (
         // List View
@@ -386,8 +387,21 @@ export default function Bookings() {
                                 setSelectedBooking(booking)
                               }}
                               className="p-2 hover:bg-gray-100 rounded-lg"
+                              title="View details"
                             >
                               <Eye className="h-5 w-5 text-gray-500" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                if (confirm(`Are you sure you want to delete the booking for ${booking.name}?`)) {
+                                  deleteBooking(booking.id)
+                                }
+                              }}
+                              className="p-2 hover:bg-red-50 rounded-lg"
+                              title="Delete booking"
+                            >
+                              <Trash2 className="h-5 w-5 text-red-500" />
                             </button>
                           </div>
                         </div>
