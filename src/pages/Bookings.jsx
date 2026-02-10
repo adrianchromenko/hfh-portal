@@ -127,8 +127,28 @@ export default function Bookings() {
     try {
       await deleteDoc(doc(db, 'bookings', bookingId))
       setSelectedBooking(null)
+      
+      // Show success message
+      const successMessage = document.createElement('div')
+      successMessage.className = 'fixed top-4 right-4 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 z-50'
+      successMessage.style.zIndex = '10000'
+      successMessage.innerHTML = `
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+        <span>Booking deleted successfully.</span>
+      `
+      document.body.appendChild(successMessage)
+      
+      setTimeout(() => {
+        successMessage.style.transition = 'opacity 0.5s'
+        successMessage.style.opacity = '0'
+        setTimeout(() => document.body.removeChild(successMessage), 500)
+      }, 3000)
+      
     } catch (error) {
       console.error('Error deleting booking:', error)
+      alert('Error deleting booking. Please try again.')
     }
   }
 
@@ -145,11 +165,29 @@ export default function Bookings() {
       const emailSent = await sendApprovalEmail(booking)
       
       if (!emailSent && booking.email) {
-        // Fallback to mailto link
-        window.location.href = generateApprovalEmailLink(booking)
+        // Fallback to mailto link - open in new tab to avoid navigation
+        const mailtoLink = generateApprovalEmailLink(booking)
+        window.open(mailtoLink, '_blank')
       }
 
-      alert(`Pickup approved for ${booking.name}. ${emailSent ? 'Email sent!' : 'Please send the email manually.'}`)
+      // Show success message
+      const successMessage = document.createElement('div')
+      successMessage.className = 'fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 z-50'
+      successMessage.style.zIndex = '10000'
+      successMessage.innerHTML = `
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+        <span>Order Confirmed! ${emailSent ? 'Email sent to customer.' : 'Please send the email manually.'}</span>
+      `
+      document.body.appendChild(successMessage)
+      
+      setTimeout(() => {
+        successMessage.style.transition = 'opacity 0.5s'
+        successMessage.style.opacity = '0'
+        setTimeout(() => document.body.removeChild(successMessage), 500)
+      }, 4000)
+      
     } catch (error) {
       console.error('Error approving booking:', error)
       alert('Error approving booking. Please try again.')
@@ -169,11 +207,29 @@ export default function Bookings() {
       const emailSent = await sendDenialEmail(booking)
       
       if (!emailSent && booking.email) {
-        // Fallback to mailto link
-        window.location.href = generateDenialEmailLink(booking)
+        // Fallback to mailto link - open in new tab to avoid navigation
+        const mailtoLink = generateDenialEmailLink(booking)
+        window.open(mailtoLink, '_blank')
       }
 
-      alert(`Pickup denied for ${booking.name}. ${emailSent ? 'Email sent!' : 'Please send the email manually.'}`)
+      // Show success message
+      const successMessage = document.createElement('div')
+      successMessage.className = 'fixed top-4 right-4 bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 z-50'
+      successMessage.style.zIndex = '10000'
+      successMessage.innerHTML = `
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+        <span>Order Denied. ${emailSent ? 'Email sent to customer.' : 'Please send the email manually.'}</span>
+      `
+      document.body.appendChild(successMessage)
+      
+      setTimeout(() => {
+        successMessage.style.transition = 'opacity 0.5s'
+        successMessage.style.opacity = '0'
+        setTimeout(() => document.body.removeChild(successMessage), 500)
+      }, 4000)
+      
     } catch (error) {
       console.error('Error denying booking:', error)
       alert('Error denying booking. Please try again.')
