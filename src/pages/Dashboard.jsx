@@ -320,7 +320,10 @@ export default function Dashboard() {
                     <div>
                       <p className="font-medium text-gray-900">{booking.name}</p>
                       <p className="text-sm text-gray-500">
-                        {booking.time ? formatTime(booking.time) : '10 AM - 4 PM'} - {booking.city}
+                        {booking.time ? formatTime(booking.time) : '10 AM - 4 PM'}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {booking.address}, {booking.city}, {booking.state} {booking.zip}
                       </p>
                     </div>
                   </div>
@@ -360,9 +363,13 @@ export default function Dashboard() {
                     <p className="text-sm text-gray-500">
                       {booking.date
                         ? format(new Date(booking.date + 'T12:00:00'), 'MMM d, yyyy')
-                        : 'No date'}{' '}
-                      - {booking.items?.substring(0, 30)}
-                      {booking.items?.length > 30 ? '...' : ''}
+                        : 'No date'}
+                      {booking.time ? ` at ${formatTime(booking.time)}` : ''}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      Booked: {booking.createdAt?.toDate ? 
+                        format(booking.createdAt.toDate(), 'MMM d, h:mm a') : 
+                        'Recently'}
                     </p>
                   </div>
                   <StatusBadge status={booking.status} />
