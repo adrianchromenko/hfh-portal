@@ -15,7 +15,8 @@ import {
   X,
   Trash2,
   Eye,
-  ChevronRight
+  ChevronRight,
+  Image
 } from 'lucide-react'
 import StatusBadge from '../components/StatusBadge'
 
@@ -266,7 +267,7 @@ export default function Bookings() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm text-gray-500">
                               <div className="flex items-center gap-1">
                                 <Clock className="h-4 w-4" />
-                                {booking.time ? formatTime(booking.time) : 'No time'}
+                                {booking.time ? formatTime(booking.time) : '10 AM - 4 PM'}
                               </div>
                               <div className="flex items-center gap-1">
                                 <MapPin className="h-4 w-4" />
@@ -406,7 +407,7 @@ function BookingModal({ booking, onClose, onUpdateStatus, onDelete }) {
                 <div>
                   <p className="text-xs text-gray-500">Time</p>
                   <p className="font-medium">
-                    {booking.time ? formatTime(booking.time) : 'Not set'}
+                    {booking.time ? formatTime(booking.time) : '10:00 AM - 4:00 PM'}
                   </p>
                 </div>
               </div>
@@ -445,6 +446,30 @@ function BookingModal({ booking, onClose, onUpdateStatus, onDelete }) {
               <p className="text-gray-700">{booking.items || 'No items specified'}</p>
             </div>
           </div>
+
+          {/* Donation Photos */}
+          {booking.photos && booking.photos.length > 0 && (
+            <div>
+              <h3 className="text-sm font-medium text-gray-700 mb-3">Donation Photos</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {booking.photos.map((url, index) => (
+                  <a
+                    key={index}
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block aspect-square rounded-lg overflow-hidden border border-gray-200 hover:border-habitat-green transition-colors"
+                  >
+                    <img
+                      src={url}
+                      alt={`Donation photo ${index + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Notes */}
           {booking.notes && (

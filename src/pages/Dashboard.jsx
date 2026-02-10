@@ -320,7 +320,7 @@ export default function Dashboard() {
                     <div>
                       <p className="font-medium text-gray-900">{booking.name}</p>
                       <p className="text-sm text-gray-500">
-                        {booking.time ? formatTime(booking.time) : 'No time set'} - {booking.city}
+                        {booking.time ? formatTime(booking.time) : '10 AM - 4 PM'} - {booking.city}
                       </p>
                     </div>
                   </div>

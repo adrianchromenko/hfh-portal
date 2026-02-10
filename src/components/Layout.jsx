@@ -8,7 +8,8 @@ import {
   Settings,
   LogOut,
   Menu,
-  X
+  X,
+  MapPin
 } from 'lucide-react'
 import logo from '../assets/images/sault-black.webp'
 
@@ -16,6 +17,7 @@ const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/bookings', icon: ClipboardList, label: 'Bookings' },
   { path: '/calendar', icon: CalendarDays, label: 'Calendar' },
+  { path: '/map', icon: MapPin, label: 'Map' },
   { path: '/settings', icon: Settings, label: 'Settings' },
 ]
 

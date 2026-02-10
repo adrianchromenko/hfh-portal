@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard'
 import Bookings from './pages/Bookings'
 import Calendar from './pages/Calendar'
 import Settings from './pages/Settings'
+import MapPage from './pages/MapPage'
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
             <Route index element={<Dashboard />} />
             <Route path="bookings" element={<Bookings />} />
             <Route path="calendar" element={<Calendar />} />
+            <Route path="map" element={<MapPage />} />
             <Route path="settings" element={<Settings />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
