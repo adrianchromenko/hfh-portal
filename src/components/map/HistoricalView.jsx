@@ -22,8 +22,7 @@ export default function HistoricalView({ onClose }) {
         bookingsRef,
         where('date', '>=', startDate),
         where('date', '<=', endDate),
-        orderBy('date', 'desc'),
-        orderBy('createdAt', 'desc')
+        orderBy('date', 'desc')
       )
 
       const snapshot = await getDocs(q)
@@ -41,6 +40,17 @@ export default function HistoricalView({ onClose }) {
             pickupCount++
           }
         }
+      })
+
+      // Sort by date and createdAt after fetching
+      data.sort((a, b) => {
+        const dateCompare = (b.date || '').localeCompare(a.date || '')
+        if (dateCompare !== 0) return dateCompare
+        
+        // Compare createdAt timestamps
+        const aTime = a.createdAt?.seconds || 0
+        const bTime = b.createdAt?.seconds || 0
+        return bTime - aTime
       })
 
       setBookings(data)
@@ -83,11 +93,11 @@ export default function HistoricalView({ onClose }) {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4" style={{ zIndex: 10000 }}>
       <div className="bg-white rounded-xl shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="p-6 border-b bg-gradient-to-r from-habitat-green to-green-700 text-white">
+        <div className="p-6 border-b text-white" style={{ background: 'linear-gradient(to right, #0099CC, #0077AA)' }}>
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-bold">Historical Pickups & Deliveries</h2>
-              <p className="text-green-100 mt-1">View and filter past routes and stops</p>
+              <p className="text-blue-100 mt-1">View and filter past routes and stops</p>
             </div>
             <button 
               onClick={onClose}
