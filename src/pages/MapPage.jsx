@@ -2,13 +2,14 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { collection, query, where, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { format } from 'date-fns'
-import { Plus, Loader2, Printer, Download } from 'lucide-react'
+import { Plus, Loader2, Printer, Download, History } from 'lucide-react'
 import { geocodeAddress } from '../utils/geocode'
 import { optimizeRoute, getDepot } from '../utils/routing'
 import MapView from '../components/map/MapView'
 import RoutePanel from '../components/map/RoutePanel'
 import AddStopModal from '../components/map/AddStopModal'
 import PrintRouteSheet from '../components/map/PrintRouteSheet'
+import HistoricalView from '../components/map/HistoricalView'
 
 export default function MapPage() {
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
@@ -19,6 +20,7 @@ export default function MapPage() {
   const [isOptimizing, setIsOptimizing] = useState(false)
   const [geocodingStatus, setGeocodingStatus] = useState('')
   const [showPrintView, setShowPrintView] = useState(false)
+  const [showHistoricalView, setShowHistoricalView] = useState(false)
   const mapRef = useRef(null)
 
   const depot = getDepot()
@@ -152,6 +154,14 @@ export default function MapPage() {
             onChange={(e) => setSelectedDate(e.target.value)}
             className="input-field w-auto"
           />
+          <button
+            onClick={() => setShowHistoricalView(true)}
+            className="btn-secondary flex items-center gap-2 whitespace-nowrap"
+            title="View historical pickups and deliveries"
+          >
+            <History className="h-4 w-4" />
+            History
+          </button>
           {routeData && (
             <button
               onClick={handlePrint}
@@ -220,6 +230,13 @@ export default function MapPage() {
           stops={bookings}
           date={selectedDate}
           depot={depot}
+        />
+      )}
+
+      {/* Historical View */}
+      {showHistoricalView && (
+        <HistoricalView
+          onClose={() => setShowHistoricalView(false)}
         />
       )}
     </div>
