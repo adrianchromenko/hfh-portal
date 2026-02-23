@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { collection, query, orderBy, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
-import { createUserWithEmailAndPassword, updatePassword, sendPasswordResetEmail } from 'firebase/auth'
-import { auth } from '../firebase'
+import { initializeApp, deleteApp } from 'firebase/app'
+import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth'
+import app from '../firebase'
 import {
   Search,
   Plus,
@@ -19,6 +20,22 @@ import {
   Eye,
   EyeOff
 } from 'lucide-react'
+
+// Create a Firebase Auth user using a secondary app instance
+// so the currently signed-in admin doesn't get logged out
+async function createAuthUser(email, password) {
+  const secondaryApp = initializeApp(app.options, 'SecondaryApp_' + Date.now())
+  const secondaryAuth = getAuth(secondaryApp)
+  try {
+    const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password)
+    await signOut(secondaryAuth)
+    await deleteApp(secondaryApp)
+    return userCredential.user.uid
+  } catch (error) {
+    try { await deleteApp(secondaryApp) } catch (_) {}
+    throw error
+  }
+}
 
 export default function Users() {
   const [users, setUsers] = useState([])
@@ -253,13 +270,26 @@ function AddUserModal({ onClose, onSuccess }) {
       return
     }
 
+    if (formData.password && formData.password.length < 6) {
+      setError('Password must be at least 6 characters')
+      return
+    }
+
     setSubmitting(true)
 
     try {
-      // Create user in Firestore (not Authentication for now)
-      // In production, you'd create auth user first, then Firestore document
+      let authUid = null
+
+      // If password provided, create a real Firebase Auth account
+      if (formData.password) {
+        authUid = await createAuthUser(formData.email, formData.password)
+      }
+
+      // Create Firestore user document (without storing the password)
+      const { password, ...userData } = formData
       await addDoc(collection(db, 'users'), {
-        ...formData,
+        ...userData,
+        ...(authUid && { authUid }),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       })
@@ -267,7 +297,13 @@ function AddUserModal({ onClose, onSuccess }) {
       onSuccess(`User ${formData.name} created successfully`)
     } catch (err) {
       console.error('Error creating user:', err)
-      setError('Failed to create user. Please try again.')
+      if (err.code === 'auth/email-already-in-use') {
+        setError('This email already has a login account.')
+      } else if (err.code === 'auth/weak-password') {
+        setError('Password is too weak. Must be at least 6 characters.')
+      } else {
+        setError('Failed to create user. Please try again.')
+      }
     } finally {
       setSubmitting(false)
     }
@@ -444,16 +480,25 @@ function EditUserModal({ user, onClose, onSuccess }) {
     setError('')
 
     try {
+      // Create a Firebase Auth account for this user
+      const authUid = await createAuthUser(formData.email, newPassword)
+
+      // Store the auth UID on the Firestore document
       await updateDoc(doc(db, 'users', user.id), {
-        password: newPassword,
+        authUid,
         updatedAt: serverTimestamp()
       })
+
       setNewPassword('')
       setShowPassword(false)
-      onSuccess(`Password updated for ${formData.name}`)
+      onSuccess(`Password set for ${formData.name} — they can now log in`)
     } catch (err) {
       console.error('Error setting password:', err)
-      setError('Failed to set password. Please try again.')
+      if (err.code === 'auth/email-already-in-use') {
+        setError('This email already has a login account. The user can use "Forgot Password" on the login page to reset it.')
+      } else {
+        setError('Failed to set password. Please try again.')
+      }
     } finally {
       setSettingPassword(false)
     }
