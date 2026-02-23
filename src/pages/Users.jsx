@@ -15,7 +15,9 @@ import {
   User,
   Key,
   Save,
-  AlertCircle
+  AlertCircle,
+  Eye,
+  EyeOff
 } from 'lucide-react'
 
 export default function Users() {
@@ -388,6 +390,9 @@ function AddUserModal({ onClose, onSuccess }) {
 function EditUserModal({ user, onClose, onSuccess }) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [settingPassword, setSettingPassword] = useState(false)
   const [formData, setFormData] = useState({
     name: user.name || '',
     email: user.email || '',
@@ -425,15 +430,32 @@ function EditUserModal({ user, onClose, onSuccess }) {
     }
   }
 
-  const sendPasswordReset = async () => {
+  const handleSetPassword = async () => {
+    if (!newPassword) {
+      setError('Please enter a password')
+      return
+    }
+    if (newPassword.length < 6) {
+      setError('Password must be at least 6 characters')
+      return
+    }
+
+    setSettingPassword(true)
+    setError('')
+
     try {
-      // This would send a password reset email
-      // await sendPasswordResetEmail(auth, formData.email)
-      alert(`Password reset email would be sent to ${formData.email}`)
-      onSuccess(`Password reset email sent to ${formData.email}`)
-    } catch (error) {
-      console.error('Error sending password reset:', error)
-      setError('Failed to send password reset email')
+      await updateDoc(doc(db, 'users', user.id), {
+        password: newPassword,
+        updatedAt: serverTimestamp()
+      })
+      setNewPassword('')
+      setShowPassword(false)
+      onSuccess(`Password updated for ${formData.name}`)
+    } catch (err) {
+      console.error('Error setting password:', err)
+      setError('Failed to set password. Please try again.')
+    } finally {
+      setSettingPassword(false)
     }
   }
 
@@ -503,15 +525,42 @@ function EditUserModal({ user, onClose, onSuccess }) {
             </select>
           </div>
 
-          <div className="p-3 bg-gray-50 rounded-lg">
-            <button
-              type="button"
-              onClick={sendPasswordReset}
-              className="text-sm text-habitat-green hover:underline flex items-center gap-2"
-            >
-              <Key className="h-4 w-4" />
-              Send Password Reset Email
-            </button>
+          <div className="p-3 bg-gray-50 rounded-lg space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              Set Password
+            </label>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="input-field pr-10"
+                  placeholder="Enter new password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={handleSetPassword}
+                disabled={settingPassword || !newPassword}
+                className="btn-primary flex items-center gap-1 text-sm whitespace-nowrap"
+              >
+                {settingPassword ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                ) : (
+                  <Key className="h-4 w-4" />
+                )}
+                Set
+              </button>
+            </div>
+            <p className="text-xs text-gray-500">Minimum 6 characters</p>
           </div>
 
           {error && (
