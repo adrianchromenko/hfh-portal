@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { collection, query, orderBy, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { initializeApp, deleteApp } from 'firebase/app'
-import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth'
+import { getAuth, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from 'firebase/auth'
 import app from '../firebase'
 import {
   Search,
@@ -429,6 +429,7 @@ function EditUserModal({ user, onClose, onSuccess }) {
   const [newPassword, setNewPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [settingPassword, setSettingPassword] = useState(false)
+  const [sendingReset, setSendingReset] = useState(false)
   const [formData, setFormData] = useState({
     name: user.name || '',
     email: user.email || '',
@@ -495,12 +496,41 @@ function EditUserModal({ user, onClose, onSuccess }) {
     } catch (err) {
       console.error('Error setting password:', err)
       if (err.code === 'auth/email-already-in-use') {
-        setError('This email already has a login account. The user can use "Forgot Password" on the login page to reset it.')
+        setError('This email already has a login account. Use "Send Password Reset Email" below instead.')
       } else {
         setError('Failed to set password. Please try again.')
       }
     } finally {
       setSettingPassword(false)
+    }
+  }
+
+  const handleSendResetEmail = async () => {
+    setSendingReset(true)
+    setError('')
+
+    try {
+      // If the user doesn't have a Firebase Auth account yet, create one with a random password
+      if (!user.authUid) {
+        const tempPassword = crypto.randomUUID().slice(0, 20)
+        const authUid = await createAuthUser(formData.email, tempPassword)
+        await updateDoc(doc(db, 'users', user.id), {
+          authUid,
+          updatedAt: serverTimestamp()
+        })
+      }
+
+      await sendPasswordResetEmail(getAuth(), formData.email)
+      onSuccess(`Password reset email sent to ${formData.email}`)
+    } catch (err) {
+      console.error('Error sending reset email:', err)
+      if (err.code === 'auth/user-not-found') {
+        setError('No login account found for this email. Set a password first.')
+      } else {
+        setError('Failed to send reset email. Please try again.')
+      }
+    } finally {
+      setSendingReset(false)
     }
   }
 
@@ -606,6 +636,22 @@ function EditUserModal({ user, onClose, onSuccess }) {
               </button>
             </div>
             <p className="text-xs text-gray-500">Minimum 6 characters</p>
+            <div className="pt-2 border-t border-gray-200 mt-2">
+              <button
+                type="button"
+                onClick={handleSendResetEmail}
+                disabled={sendingReset}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-habitat-green bg-green-50 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {sendingReset ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-habitat-green border-t-transparent" />
+                ) : (
+                  <Mail className="h-4 w-4" />
+                )}
+                Send Password Reset Email
+              </button>
+              <p className="text-xs text-gray-500 mt-1">Sends a link to {formData.email} to set their own password</p>
+            </div>
           </div>
 
           {error && (

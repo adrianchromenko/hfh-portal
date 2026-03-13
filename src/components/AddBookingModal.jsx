@@ -13,7 +13,7 @@ export default function AddBookingModal({ onClose }) {
     email: '',
     phone: '',
     address: '',
-    city: '',
+    city: 'Sault Ste. Marie',
     state: 'ON',
     zip: '',
     date: format(new Date(), 'yyyy-MM-dd'),
