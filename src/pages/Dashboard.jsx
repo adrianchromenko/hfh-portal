@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { collection, query, onSnapshot, orderBy } from 'firebase/firestore'
+import { collection, query, onSnapshot, orderBy, doc, updateDoc, deleteDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { format, startOfToday, endOfToday, startOfWeek, endOfWeek, getDay, subDays } from 'date-fns'
 import {
@@ -11,9 +11,11 @@ import {
   ArrowRight,
   Package,
   BarChart3,
-  Users
+  Users,
+  Truck
 } from 'lucide-react'
 import StatusBadge from '../components/StatusBadge'
+import BookingModal from '../components/BookingModal'
 
 const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const DAY_COLORS = ['bg-red-400', 'bg-blue-400', 'bg-green-400', 'bg-yellow-400', 'bg-purple-400', 'bg-pink-400', 'bg-orange-400']
@@ -29,6 +31,7 @@ export default function Dashboard() {
   const [todaysPickups, setTodaysPickups] = useState([])
   const [dayOfWeekStats, setDayOfWeekStats] = useState([0, 0, 0, 0, 0, 0, 0])
   const [timeSlotStats, setTimeSlotStats] = useState({})
+  const [selectedBooking, setSelectedBooking] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -119,7 +122,7 @@ export default function Dashboard() {
 
   const statCards = [
     {
-      label: "Today's Pickups",
+      label: "Today's Activities",
       value: stats.todayBookings,
       icon: CalendarDays,
       color: 'bg-blue-500'
@@ -289,10 +292,10 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Today's Pickups */}
+        {/* Today's Activities */}
         <div className="card">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Today's Pickups</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Today's Activities</h2>
             <Link
               to="/calendar"
               className="text-habitat-green hover:underline text-sm flex items-center gap-1"
@@ -304,32 +307,53 @@ export default function Dashboard() {
           {todaysPickups.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <CalendarDays className="h-12 w-12 mx-auto mb-2 opacity-50" />
-              <p>No pickups scheduled for today</p>
+              <p>No pickups or deliveries scheduled for today</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {todaysPickups.map((booking) => (
-                <div
-                  key={booking.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-habitat-green/10 rounded-lg flex items-center justify-center">
-                      <Clock className="h-5 w-5 text-habitat-green" />
+              {todaysPickups.map((booking) => {
+                const bookingType = booking.type || 'pickup'
+                return (
+                  <div
+                    key={booking.id}
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
+                    onClick={() => setSelectedBooking(booking)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                        bookingType === 'delivery'
+                          ? 'bg-orange-100'
+                          : 'bg-blue-100'
+                      }`}>
+                        {bookingType === 'delivery' ? (
+                          <Truck className="h-5 w-5 text-orange-600" />
+                        ) : (
+                          <Package className="h-5 w-5 text-blue-600" />
+                        )}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-gray-900">{booking.name}</p>
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
+                            bookingType === 'delivery'
+                              ? 'bg-orange-100 text-orange-700'
+                              : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {bookingType === 'delivery' ? 'Delivery' : 'Pickup'}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-500">
+                          {booking.time ? formatTime(booking.time) : '10 AM - 4 PM'}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          {booking.address}, {booking.city}, {booking.state} {booking.zip}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium text-gray-900">{booking.name}</p>
-                      <p className="text-sm text-gray-500">
-                        {booking.time ? formatTime(booking.time) : '10 AM - 4 PM'}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        {booking.address}, {booking.city}, {booking.state} {booking.zip}
-                      </p>
-                    </div>
+                    <StatusBadge status={booking.status} />
                   </div>
-                  <StatusBadge status={booking.status} />
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
@@ -379,8 +403,40 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Booking Detail Modal */}
+      {selectedBooking && (
+        <BookingModal
+          booking={selectedBooking}
+          onClose={() => setSelectedBooking(null)}
+          onUpdateStatus={updateBookingStatus}
+          onDelete={deleteBooking}
+        />
+      )}
     </div>
   )
+
+  async function updateBookingStatus(bookingId, newStatus) {
+    try {
+      await updateDoc(doc(db, 'bookings', bookingId), {
+        status: newStatus,
+        updatedAt: new Date()
+      })
+    } catch (error) {
+      console.error('Error updating booking:', error)
+    }
+  }
+
+  async function deleteBooking(bookingId) {
+    if (!confirm('Are you sure you want to delete this booking?')) return
+    try {
+      await deleteDoc(doc(db, 'bookings', bookingId))
+      setSelectedBooking(null)
+    } catch (error) {
+      console.error('Error deleting booking:', error)
+      alert('Error deleting booking. Please try again.')
+    }
+  }
 }
 
 function formatTime(time) {
