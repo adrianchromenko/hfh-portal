@@ -123,7 +123,7 @@ export default function RoutePanel({
                   </span>
                 </div>
                 <p className="text-xs text-gray-500 truncate">
-                  {stop.address}, {stop.city}, {stop.state} {stop.zip}
+                  {stop.address}{stop.apartment ? `, ${stop.apartment}` : ''}, {stop.city}, {stop.state} {stop.zip}
                 </p>
                 {stop.items && (
                   <p className="text-xs text-gray-400 truncate mt-0.5">

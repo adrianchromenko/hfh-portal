@@ -13,6 +13,7 @@ export default function AddBookingModal({ onClose }) {
     email: '',
     phone: '',
     address: '',
+    apartment: '',
     city: 'Sault Ste. Marie',
     state: 'ON',
     zip: '',
@@ -198,17 +199,31 @@ export default function AddBookingModal({ onClose }) {
           <div>
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Address</h3>
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Street Address <span className="text-red-500">*</span>
-                </label>
-                <input
-                  name="address"
-                  value={formData.address}
-                  onChange={handleChange}
-                  className="input-field"
-                  placeholder="123 Main Street"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Street Address <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    name="address"
+                    value={formData.address}
+                    onChange={handleChange}
+                    className="input-field"
+                    placeholder="123 Main Street"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Apt / Unit #
+                  </label>
+                  <input
+                    name="apartment"
+                    value={formData.apartment}
+                    onChange={handleChange}
+                    className="input-field"
+                    placeholder="Apt 4, Unit B, etc."
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-3 gap-4">

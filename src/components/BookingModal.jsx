@@ -27,6 +27,7 @@ export default function BookingModal({ booking, onClose, onUpdateStatus, onDelet
     phone: booking.phone || '',
     date: booking.date || '',
     address: booking.address || '',
+    apartment: booking.apartment || '',
     city: booking.city || '',
     state: booking.state || '',
     zip: booking.zip || '',
@@ -216,9 +217,15 @@ export default function BookingModal({ booking, onClose, onUpdateStatus, onDelet
             <h3 className="text-sm font-medium text-gray-700 mb-3">Address</h3>
             {editing ? (
               <div className="space-y-3">
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Street Address</label>
-                  <input name="address" value={editData.address} onChange={handleEditChange} className="input-field" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Street Address</label>
+                    <input name="address" value={editData.address} onChange={handleEditChange} className="input-field" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Apt / Unit #</label>
+                    <input name="apartment" value={editData.apartment} onChange={handleEditChange} className="input-field" placeholder="Apt 4, Unit B, etc." />
+                  </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
@@ -239,7 +246,10 @@ export default function BookingModal({ booking, onClose, onUpdateStatus, onDelet
               <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
                 <MapPin className="h-5 w-5 text-gray-400 mt-0.5" />
                 <div>
-                  <p className="font-medium">{booking.address}</p>
+                  <p className="font-medium">
+                    {booking.address}
+                    {booking.apartment && <span className="text-gray-500 ml-1">({booking.apartment})</span>}
+                  </p>
                   <p className="text-gray-600">
                     {booking.city}, {booking.state} {booking.zip}
                   </p>

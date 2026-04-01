@@ -426,7 +426,7 @@ export default function Bookings() {
                               <div className="flex items-center gap-1">
                                 <MapPin className="h-4 w-4" />
                                 <span className="truncate">
-                                  {booking.address}, {booking.city}, {booking.state} {booking.zip}
+                                  {booking.address}{booking.apartment ? `, ${booking.apartment}` : ''}, {booking.city}, {booking.state} {booking.zip}
                                 </span>
                               </div>
                               <div className="flex items-center gap-1">

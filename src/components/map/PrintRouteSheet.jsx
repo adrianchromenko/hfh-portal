@@ -146,7 +146,7 @@ export default function PrintRouteSheet({ routeData, stops, date, depot }) {
                     <div className="grid grid-cols-2 gap-4 text-sm mb-2">
                       <div>
                         <span className="font-semibold">📍 Address:</span>
-                        <p>{stop.address}</p>
+                        <p>{stop.address}{stop.apartment ? `, ${stop.apartment}` : ''}</p>
                         <p>{stop.city}, {stop.state} {stop.zip}</p>
                       </div>
                       <div>
