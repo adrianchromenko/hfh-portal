@@ -15,8 +15,8 @@ L.Icon.Default.mergeOptions({
   shadowUrl: markerShadow,
 })
 
-function createNumberedIcon(number, type) {
-  const color = type === 'delivery' ? '#F7941D' : '#0099CC'
+function createNumberedIcon(number, type, isRecurring) {
+  const color = isRecurring ? '#7C3AED' : type === 'delivery' ? '#F7941D' : '#0099CC'
   return L.divIcon({
     className: 'custom-marker',
     html: `<div style="background:${color};color:white;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:13px;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.35)">${number}</div>`,
@@ -87,7 +87,7 @@ export default function MapView({ stops, depot, routeGeometry, onStopClick }) {
           <Marker
             key={stop.id}
             position={[stop.lat, stop.lng]}
-            icon={createNumberedIcon(index + 1, type)}
+            icon={createNumberedIcon(index + 1, type, stop.recurring)}
             eventHandlers={{
               click: () => onStopClick && onStopClick(stop)
             }}
@@ -95,6 +95,14 @@ export default function MapView({ stops, depot, routeGeometry, onStopClick }) {
             <Popup>
               <div className="text-sm">
                 <strong>{stop.name}</strong>
+                {stop.recurring && (
+                  <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={{
+                    background: '#EDE9FE',
+                    color: '#6D28D9'
+                  }}>
+                    {stop.recurringFrequency === 'weekly' ? 'Weekly' : stop.recurringFrequency === 'biweekly' ? 'Bi-weekly' : 'Monthly'}
+                  </span>
+                )}
                 <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={{
                   background: type === 'delivery' ? '#FEF3C7' : '#E0F2FE',
                   color: type === 'delivery' ? '#92400E' : '#0369A1'

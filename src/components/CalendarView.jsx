@@ -124,6 +124,7 @@ export default function CalendarView({ bookings, onUpdateStatus, onApprove, onDe
             const isSelectedDay = selectedDate && isSameDay(parseISO(selectedDate), day)
             const pendingCount = dateBookings.filter(b => b.status === 'pending').length
             const confirmedCount = dateBookings.filter(b => b.status === 'confirmed').length
+            const recurringCount = dateBookings.filter(b => b.recurring).length
             
             return (
               <div
@@ -158,8 +159,8 @@ export default function CalendarView({ bookings, onUpdateStatus, onApprove, onDe
                           {dateBookings.length}
                         </span>
                       </div>
-                      {(pendingCount > 0 || confirmedCount > 0) && (
-                        <div className="flex gap-1 justify-center">
+                      {(pendingCount > 0 || confirmedCount > 0 || recurringCount > 0) && (
+                        <div className="flex gap-1 justify-center flex-wrap">
                           {pendingCount > 0 && (
                             <span className="text-xs text-orange-600 font-medium">
                               {pendingCount}P
@@ -168,6 +169,11 @@ export default function CalendarView({ bookings, onUpdateStatus, onApprove, onDe
                           {confirmedCount > 0 && (
                             <span className="text-xs text-green-600 font-medium">
                               {confirmedCount}C
+                            </span>
+                          )}
+                          {recurringCount > 0 && (
+                            <span className="text-xs text-purple-600 font-medium">
+                              {recurringCount}R
                             </span>
                           )}
                         </div>
@@ -197,6 +203,10 @@ export default function CalendarView({ bookings, onUpdateStatus, onApprove, onDe
           <div className="flex items-center gap-2">
             <span className="text-green-600 font-medium">C</span>
             <span className="text-gray-600">Confirmed</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-purple-600 font-medium">R</span>
+            <span className="text-gray-600">Recurring</span>
           </div>
         </div>
       </div>

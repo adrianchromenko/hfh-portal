@@ -14,7 +14,8 @@ import {
   MapPin,
   Edit2,
   Save,
-  Truck
+  Truck,
+  Repeat
 } from 'lucide-react'
 import StatusBadge from './StatusBadge'
 
@@ -70,18 +71,26 @@ export default function BookingModal({ booking, onClose, onUpdateStatus, onDelet
                 {editing ? 'Edit Booking' : booking.name}
               </h2>
               {!editing && (
-                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                  bookingType === 'delivery'
-                    ? 'bg-orange-100 text-orange-700'
-                    : 'bg-blue-100 text-blue-700'
-                }`}>
-                  {bookingType === 'delivery' ? (
-                    <Truck className="h-3 w-3" />
-                  ) : (
-                    <Package className="h-3 w-3" />
+                <>
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                    bookingType === 'delivery'
+                      ? 'bg-orange-100 text-orange-700'
+                      : 'bg-blue-100 text-blue-700'
+                  }`}>
+                    {bookingType === 'delivery' ? (
+                      <Truck className="h-3 w-3" />
+                    ) : (
+                      <Package className="h-3 w-3" />
+                    )}
+                    {bookingType === 'delivery' ? 'Delivery' : 'Pickup'}
+                  </span>
+                  {booking.recurring && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                      <Repeat className="h-3 w-3" />
+                      {booking.recurringFrequency === 'weekly' ? 'Weekly' : booking.recurringFrequency === 'biweekly' ? 'Bi-weekly' : 'Monthly'}
+                    </span>
                   )}
-                  {bookingType === 'delivery' ? 'Delivery' : 'Pickup'}
-                </span>
+                </>
               )}
             </div>
             <p className="text-sm text-gray-500">

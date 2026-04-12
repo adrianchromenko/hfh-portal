@@ -1,4 +1,4 @@
-import { MapPin, Navigation, AlertTriangle, Package, Truck } from 'lucide-react'
+import { MapPin, Navigation, AlertTriangle, Package, Truck, Repeat } from 'lucide-react'
 import StatusBadge from '../StatusBadge'
 
 export default function RoutePanel({
@@ -107,12 +107,12 @@ export default function RoutePanel({
             >
               <div
                 className="flex-shrink-0 w-7 h-7 rounded-full text-white flex items-center justify-center font-bold text-xs"
-                style={{ background: type === 'delivery' ? '#F7941D' : '#0099CC' }}
+                style={{ background: stop.recurring ? '#7C3AED' : type === 'delivery' ? '#F7941D' : '#0099CC' }}
               >
                 {index + 1}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
+                <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                   <p className="font-medium text-gray-900 text-sm truncate">{stop.name}</p>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                     type === 'delivery'
@@ -121,6 +121,12 @@ export default function RoutePanel({
                   }`}>
                     {type === 'delivery' ? 'Delivery' : 'Pickup'}
                   </span>
+                  {stop.recurring && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-purple-100 text-purple-800 flex items-center gap-0.5">
+                      <Repeat className="h-2.5 w-2.5" />
+                      {stop.recurringFrequency === 'weekly' ? 'Weekly' : stop.recurringFrequency === 'biweekly' ? 'Bi-weekly' : 'Monthly'}
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-gray-500 truncate">
                   {stop.address}{stop.apartment ? `, ${stop.apartment}` : ''}, {stop.city}, {stop.state} {stop.zip}

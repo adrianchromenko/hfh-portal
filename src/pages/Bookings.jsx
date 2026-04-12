@@ -15,7 +15,8 @@ import {
   ChevronRight,
   List,
   CalendarDays,
-  Plus
+  Plus,
+  Repeat
 } from 'lucide-react'
 import StatusBadge from '../components/StatusBadge'
 import CalendarView from '../components/CalendarView'
@@ -409,7 +410,9 @@ export default function Bookings() {
                     {dateBookings.map((booking) => (
                       <div
                         key={booking.id}
-                        className="card hover:shadow-md transition-shadow cursor-pointer"
+                        className={`card hover:shadow-md transition-shadow cursor-pointer ${
+                          booking.recurring ? 'border-l-4 border-l-purple-500' : ''
+                        }`}
                         onClick={() => setSelectedBooking(booking)}
                       >
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -417,6 +420,12 @@ export default function Bookings() {
                             <div className="flex items-center gap-3 mb-2">
                               <h3 className="font-semibold text-gray-900">{booking.name}</h3>
                               <StatusBadge status={booking.status} />
+                              {booking.recurring && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                                  <Repeat className="h-3 w-3" />
+                                  {booking.recurringFrequency === 'weekly' ? 'Weekly' : booking.recurringFrequency === 'biweekly' ? 'Bi-weekly' : 'Monthly'}
+                                </span>
+                              )}
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm text-gray-500">
                               <div className="flex items-center gap-1">
