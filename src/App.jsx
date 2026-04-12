@@ -9,6 +9,7 @@ import Calendar from './pages/Calendar'
 import Settings from './pages/Settings'
 import MapPage from './pages/MapPage'
 import Users from './pages/Users'
+import Customers from './pages/Customers'
 
 function App() {
   return (
@@ -28,6 +29,7 @@ function App() {
             <Route path="bookings" element={<Bookings />} />
             <Route path="calendar" element={<Calendar />} />
             <Route path="map" element={<MapPage />} />
+            <Route path="customers" element={<Customers />} />
             <Route path="users" element={<Users />} />
             <Route path="settings" element={<Settings />} />
           </Route>

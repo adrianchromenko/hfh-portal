@@ -1,13 +1,25 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { geocodeAddress } from '../utils/geocode'
-import { X, Plus } from 'lucide-react'
-import { format } from 'date-fns'
+import {
+  subscribeBookingSettings,
+  isDateBlocked,
+  DEFAULT_BOOKING_SETTINGS
+} from '../utils/bookingSettings'
+import { X, Plus, Repeat, AlertTriangle } from 'lucide-react'
+import { format, addWeeks } from 'date-fns'
 
 export default function AddBookingModal({ onClose }) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [bookingSettings, setBookingSettings] = useState(DEFAULT_BOOKING_SETTINGS)
+
+  useEffect(() => {
+    const unsub = subscribeBookingSettings(setBookingSettings)
+    return () => unsub()
+  }, [])
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -22,7 +34,10 @@ export default function AddBookingModal({ onClose }) {
     items: '',
     notes: '',
     status: 'pending',
-    type: 'pickup'
+    type: 'pickup',
+    recurring: false,
+    recurringFrequency: 'weekly',
+    recurringWeeks: '8'
   })
 
   const handleChange = (e) => {
@@ -42,6 +57,12 @@ export default function AddBookingModal({ onClose }) {
       }
     }
 
+    const dateCheck = isDateBlocked(formData.date, bookingSettings)
+    if (dateCheck.blocked) {
+      setError(`${dateCheck.reason} Please choose a different date.`)
+      return
+    }
+
     setSubmitting(true)
 
     try {
@@ -53,15 +74,41 @@ export default function AddBookingModal({ onClose }) {
         console.warn('Geocoding failed:', geoErr)
       }
 
-      // Write to Firestore
-      await addDoc(collection(db, 'bookings'), {
-        ...formData,
+      // Build base booking data (exclude UI-only fields)
+      const { recurring, recurringFrequency, recurringWeeks, ...bookingFields } = formData
+      const recurringId = recurring ? `recurring_${Date.now()}` : null
+      const frequencyWeeks = recurringFrequency === 'weekly' ? 1 : recurringFrequency === 'biweekly' ? 2 : 4
+
+      const baseData = {
+        ...bookingFields,
         lat: coords?.lat || null,
         lng: coords?.lng || null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        manualEntry: true
-      })
+        manualEntry: true,
+        ...(recurring && {
+          recurring: true,
+          recurringId,
+          recurringFrequency
+        })
+      }
+
+      // Create the first booking
+      await addDoc(collection(db, 'bookings'), baseData)
+
+      // Create future recurring bookings
+      if (recurring) {
+        const totalWeeks = parseInt(recurringWeeks) || 8
+        const totalOccurrences = Math.floor(totalWeeks / frequencyWeeks)
+        for (let i = 1; i < totalOccurrences; i++) {
+          const futureDate = addWeeks(new Date(formData.date + 'T12:00:00'), i * frequencyWeeks)
+          await addDoc(collection(db, 'bookings'), {
+            ...baseData,
+            date: format(futureDate, 'yyyy-MM-dd'),
+            status: 'confirmed'
+          })
+        }
+      }
 
       onClose()
     } catch (err) {
@@ -178,6 +225,16 @@ export default function AddBookingModal({ onClose }) {
                   onChange={handleChange}
                   className="input-field"
                 />
+                {(() => {
+                  const check = isDateBlocked(formData.date, bookingSettings)
+                  if (!check.blocked) return null
+                  return (
+                    <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      {check.reason}
+                    </p>
+                  )
+                })()}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -192,6 +249,58 @@ export default function AddBookingModal({ onClose }) {
                   placeholder="Leave empty for default window"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Recurring */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Recurring Pickup</h3>
+            <div className="space-y-4">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.recurring}
+                  onChange={(e) => setFormData(prev => ({ ...prev, recurring: e.target.checked }))}
+                  className="h-5 w-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                />
+                <div className="flex items-center gap-2">
+                  <Repeat className="h-4 w-4 text-purple-600" />
+                  <span className="text-sm font-medium text-gray-700">This is a recurring pickup (e.g. business)</span>
+                </div>
+              </label>
+
+              {formData.recurring && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                  <div>
+                    <label className="block text-sm font-medium text-purple-800 mb-1">Frequency</label>
+                    <select
+                      name="recurringFrequency"
+                      value={formData.recurringFrequency}
+                      onChange={handleChange}
+                      className="input-field"
+                    >
+                      <option value="weekly">Weekly</option>
+                      <option value="biweekly">Every 2 Weeks</option>
+                      <option value="monthly">Monthly (every 4 weeks)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-purple-800 mb-1">Generate for how many weeks?</label>
+                    <select
+                      name="recurringWeeks"
+                      value={formData.recurringWeeks}
+                      onChange={handleChange}
+                      className="input-field"
+                    >
+                      <option value="4">4 weeks</option>
+                      <option value="8">8 weeks</option>
+                      <option value="12">12 weeks</option>
+                      <option value="26">26 weeks (6 months)</option>
+                      <option value="52">52 weeks (1 year)</option>
+                    </select>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
