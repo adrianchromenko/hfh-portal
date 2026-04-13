@@ -5,6 +5,7 @@ import { geocodeAddress } from '../utils/geocode'
 import {
   subscribeBookingSettings,
   isDateBlocked,
+  countBookingsOnDate,
   DEFAULT_BOOKING_SETTINGS
 } from '../utils/bookingSettings'
 import { X, Plus, Repeat, AlertTriangle } from 'lucide-react'
@@ -61,6 +62,19 @@ export default function AddBookingModal({ onClose }) {
     if (dateCheck.blocked) {
       setError(`${dateCheck.reason} Please choose a different date.`)
       return
+    }
+
+    const cap = Number(bookingSettings.maxPerDay) || 0
+    if (cap > 0) {
+      try {
+        const existing = await countBookingsOnDate(formData.date)
+        if (existing >= cap) {
+          setError(`This date is full (${existing}/${cap} bookings). Please choose a different date or raise the daily cap in Settings.`)
+          return
+        }
+      } catch (capErr) {
+        console.warn('Capacity check failed, allowing submit:', capErr)
+      }
     }
 
     setSubmitting(true)

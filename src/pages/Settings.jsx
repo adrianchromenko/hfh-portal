@@ -2,14 +2,13 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import {
   User,
-  Shield,
-  Bell,
   Database,
   Save,
   CheckCircle,
   CalendarX,
   Plus,
-  X
+  X,
+  Clock
 } from 'lucide-react'
 import {
   subscribeBookingSettings,
@@ -30,11 +29,6 @@ const WEEKDAYS = [
 export default function Settings() {
   const { currentUser } = useAuth()
   const [saved, setSaved] = useState(false)
-  const [notifications, setNotifications] = useState({
-    newBooking: true,
-    statusChange: true,
-    dailySummary: false
-  })
 
   const [bookingSettings, setBookingSettings] = useState(DEFAULT_BOOKING_SETTINGS)
   const [newBlockedDate, setNewBlockedDate] = useState('')
@@ -96,9 +90,31 @@ export default function Settings() {
 
   const handleSaveBookingSettings = async () => {
     setBookingError('')
+
+    const start = Number(bookingSettings.pickupStartHour)
+    const end = Number(bookingSettings.pickupEndHour)
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end > 24) {
+      setBookingError('Pickup hours must be between 0 and 24.')
+      return
+    }
+    if (end <= start) {
+      setBookingError('Pickup end time must be after start time.')
+      return
+    }
+    const cap = Number(bookingSettings.maxPerDay)
+    if (!Number.isFinite(cap) || cap < 0) {
+      setBookingError('Max pickups per day must be 0 or greater (0 = unlimited).')
+      return
+    }
+
     setSavingBooking(true)
     try {
-      await saveBookingSettings(bookingSettings)
+      await saveBookingSettings({
+        ...bookingSettings,
+        pickupStartHour: start,
+        pickupEndHour: end,
+        maxPerDay: cap
+      })
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (err) {
@@ -107,11 +123,6 @@ export default function Settings() {
     } finally {
       setSavingBooking(false)
     }
-  }
-
-  function handleSave() {
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
   }
 
   const formatDateLabel = (dateString) => {
@@ -261,6 +272,73 @@ export default function Settings() {
               )}
             </div>
 
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <Clock className="h-4 w-4 text-habitat-green" />
+                Pickup Time Window
+              </h3>
+              <p className="text-xs text-gray-500 mb-3">
+                The hours during which pickups and deliveries happen on booked days. Shown to customers on the Shopify form.
+              </p>
+              <div className="grid grid-cols-2 gap-4 max-w-md">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Start Hour (0–23)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="23"
+                    value={bookingSettings.pickupStartHour}
+                    onChange={(e) =>
+                      setBookingSettings((prev) => ({
+                        ...prev,
+                        pickupStartHour: e.target.value === '' ? '' : Number(e.target.value)
+                      }))
+                    }
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">End Hour (1–24)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="24"
+                    value={bookingSettings.pickupEndHour}
+                    onChange={(e) =>
+                      setBookingSettings((prev) => ({
+                        ...prev,
+                        pickupEndHour: e.target.value === '' ? '' : Number(e.target.value)
+                      }))
+                    }
+                    className="input-field"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-400 mt-2">
+                Example: 10 and 16 = pickups occur between 10:00 AM and 4:00 PM.
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Max Pickups Per Day</h3>
+              <p className="text-xs text-gray-500 mb-3">
+                Cap how many bookings can be scheduled for a single day. Once full, customers cannot book that date. Set to 0 for unlimited.
+              </p>
+              <input
+                type="number"
+                min="0"
+                value={bookingSettings.maxPerDay}
+                onChange={(e) =>
+                  setBookingSettings((prev) => ({
+                    ...prev,
+                    maxPerDay: e.target.value === '' ? '' : Number(e.target.value)
+                  }))
+                }
+                className="input-field max-w-xs"
+                placeholder="0 = unlimited"
+              />
+            </div>
+
             {bookingError && (
               <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">{bookingError}</p>
             )}
@@ -317,80 +395,6 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Notification Settings */}
-        <div className="card">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-habitat-green/10 rounded-lg">
-              <Bell className="h-5 w-5 text-habitat-green" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-gray-900">Notifications</h2>
-              <p className="text-sm text-gray-500">
-                Configure email notifications
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <label className="flex items-center justify-between cursor-pointer">
-              <div>
-                <p className="font-medium text-gray-900">New Booking</p>
-                <p className="text-sm text-gray-500">
-                  Receive an email when a new booking is created
-                </p>
-              </div>
-              <input
-                type="checkbox"
-                checked={notifications.newBooking}
-                onChange={(e) =>
-                  setNotifications({ ...notifications, newBooking: e.target.checked })
-                }
-                className="w-5 h-5 text-habitat-green rounded focus:ring-habitat-green"
-              />
-            </label>
-
-            <label className="flex items-center justify-between cursor-pointer">
-              <div>
-                <p className="font-medium text-gray-900">Status Changes</p>
-                <p className="text-sm text-gray-500">
-                  Receive updates when booking status changes
-                </p>
-              </div>
-              <input
-                type="checkbox"
-                checked={notifications.statusChange}
-                onChange={(e) =>
-                  setNotifications({
-                    ...notifications,
-                    statusChange: e.target.checked
-                  })
-                }
-                className="w-5 h-5 text-habitat-green rounded focus:ring-habitat-green"
-              />
-            </label>
-
-            <label className="flex items-center justify-between cursor-pointer">
-              <div>
-                <p className="font-medium text-gray-900">Daily Summary</p>
-                <p className="text-sm text-gray-500">
-                  Receive a daily email with upcoming pickups
-                </p>
-              </div>
-              <input
-                type="checkbox"
-                checked={notifications.dailySummary}
-                onChange={(e) =>
-                  setNotifications({
-                    ...notifications,
-                    dailySummary: e.target.checked
-                  })
-                }
-                className="w-5 h-5 text-habitat-green rounded focus:ring-habitat-green"
-              />
-            </label>
-          </div>
-        </div>
-
         {/* Firebase Connection */}
         <div className="card">
           <div className="flex items-center gap-3 mb-6">
@@ -430,43 +434,6 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Security */}
-        <div className="card">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-habitat-green/10 rounded-lg">
-              <Shield className="h-5 w-5 text-habitat-green" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-gray-900">Security</h2>
-              <p className="text-sm text-gray-500">Password and security options</p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-            <div>
-              <p className="font-medium text-gray-900">Password</p>
-              <p className="text-sm text-gray-500">
-                Last changed: Unknown
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                alert('Password reset email would be sent to ' + currentUser?.email)
-              }}
-              className="btn-secondary text-sm"
-            >
-              Change Password
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Save Button */}
-      <div className="flex justify-end">
-        <button onClick={handleSave} className="btn-primary flex items-center gap-2">
-          <Save className="h-4 w-4" />
-          Save Changes
-        </button>
       </div>
     </div>
   )
