@@ -1,0 +1,19 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Public read for the WordPress booking form so it can fetch blocked
+    // days/dates. Only authenticated dashboard admins can modify it.
+    match /settings/booking {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Everything else (bookings, customers, users, etc.) requires a
+    // signed-in dashboard admin.
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

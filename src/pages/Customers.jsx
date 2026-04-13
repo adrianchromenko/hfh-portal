@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   collection,
   query,
@@ -41,7 +41,7 @@ export default function Customers() {
   const [editingCustomer, setEditingCustomer] = useState(null)
   const [bookingSettings, setBookingSettings] = useState(DEFAULT_BOOKING_SETTINGS)
   const [extendingId, setExtendingId] = useState(null)
-  const [topUpRan, setTopUpRan] = useState(false)
+  const topUpRan = useRef(false)
 
   useEffect(() => {
     const unsub = subscribeBookingSettings(setBookingSettings)
@@ -59,14 +59,19 @@ export default function Customers() {
     return () => unsub()
   }, [])
 
-  // Auto-extend bookings for active customers on mount (once per mount).
+  // Auto-extend bookings for customers that existed at page-load time.
+  // We snapshot the guard the first time loading completes, regardless of
+  // whether the collection was empty, so customers added AFTER mount never
+  // get auto-topped up (which would race with their initial regenerate and
+  // duplicate bookings).
   useEffect(() => {
-    if (topUpRan || loading || customers.length === 0) return
-    setTopUpRan(true)
+    if (loading || topUpRan.current) return
+    topUpRan.current = true
+    if (customers.length === 0) return
     topUpAllActiveCustomers(customers, bookingSettings).catch((err) => {
       console.error('Auto top-up failed:', err)
     })
-  }, [customers, loading, bookingSettings, topUpRan])
+  }, [loading, customers, bookingSettings])
 
   const filtered = customers.filter((c) => {
     if (!searchTerm) return true
