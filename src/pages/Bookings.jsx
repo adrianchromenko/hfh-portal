@@ -37,6 +37,7 @@ export default function Bookings() {
   const [collapsedDates, setCollapsedDates] = useState({})
   const [viewMode, setViewMode] = useState('list') // 'list' or 'calendar'
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showPastDates, setShowPastDates] = useState(false)
   const initialFocusDoneRef = useRef(false)
   const dateSectionRefs = useRef({})
 
@@ -97,42 +98,42 @@ export default function Bookings() {
     setGroupedBookings(grouped)
   }, [bookings, searchTerm, statusFilter])
 
-  // Sort dates (most recent first, but "No Date" at the end)
-  const sortedDates = Object.keys(groupedBookings).sort((a, b) => {
-    if (a === 'No Date') return 1
-    if (b === 'No Date') return -1
-    return new Date(b) - new Date(a)
-  })
+  // Split dates into upcoming (today + future) and past, with "No Date" last.
+  // Upcoming: today at top, then chronological ascending (tomorrow, day after…).
+  // Past: most recent first (yesterday at top of the collapsed section).
+  const todayStr = format(new Date(), 'yyyy-MM-dd')
+  const allDateKeys = Object.keys(groupedBookings)
+  const upcomingDates = allDateKeys
+    .filter((d) => d !== 'No Date' && d >= todayStr)
+    .sort()
+  const pastDates = allDateKeys
+    .filter((d) => d !== 'No Date' && d < todayStr)
+    .sort((a, b) => (a < b ? 1 : -1))
+  const hasNoDate = allDateKeys.includes('No Date')
+  const sortedDates = [
+    ...upcomingDates,
+    ...pastDates,
+    ...(hasNoDate ? ['No Date'] : [])
+  ]
 
-  // On first load, collapse everything except today (or the next upcoming
-  // date if there are no bookings today) and scroll it into view.
+  // On first load, collapse every upcoming date except the focus date
+  // (today, or the next upcoming if there are no bookings today) and
+  // scroll it into view. Past dates are always collapsed behind a toggle.
   useEffect(() => {
     if (loading) return
     if (initialFocusDoneRef.current) return
-    if (sortedDates.length === 0) return
+    if (upcomingDates.length === 0) return
 
-    const todayStr = format(new Date(), 'yyyy-MM-dd')
-    let focusDate = sortedDates.includes(todayStr) ? todayStr : null
-    if (!focusDate) {
-      // Next upcoming date >= today (sortedDates is descending, so walk
-      // from the end to find the smallest date that's still >= today).
-      const upcoming = sortedDates
-        .filter((d) => d !== 'No Date' && d >= todayStr)
-        .sort()
-      focusDate = upcoming[0] || null
-    }
-    if (!focusDate) {
-      initialFocusDoneRef.current = true
-      return
-    }
+    const focusDate = upcomingDates.includes(todayStr)
+      ? todayStr
+      : upcomingDates[0]
 
     const collapsed = {}
-    sortedDates.forEach((d) => {
+    upcomingDates.forEach((d) => {
       if (d !== focusDate) collapsed[d] = true
     })
     setCollapsedDates(collapsed)
 
-    // Scroll the focused section into view after it renders.
     requestAnimationFrame(() => {
       const el = dateSectionRefs.current[focusDate]
       if (el && typeof el.scrollIntoView === 'function') {
@@ -141,7 +142,7 @@ export default function Bookings() {
     })
 
     initialFocusDoneRef.current = true
-  }, [loading, sortedDates])
+  }, [loading, upcomingDates, todayStr])
 
   const toggleDateCollapse = (date) => {
     setCollapsedDates((prev) => ({
@@ -406,9 +407,8 @@ export default function Bookings() {
             <Package className="h-12 w-12 mx-auto mb-4 text-gray-300" />
             <p className="text-gray-500">No bookings found</p>
           </div>
-        ) : (
-        <div className="space-y-6">
-          {sortedDates.map((date) => {
+        ) : (() => {
+          const renderDateSection = (date) => {
             const dateBookings = groupedBookings[date]
             const isCollapsed = collapsedDates[date]
             const pendingCount = dateBookings.filter((b) => b.status === 'pending').length
@@ -523,9 +523,53 @@ export default function Bookings() {
                 )}
               </div>
             )
-          })}
-        </div>
-      )
+          }
+
+          const pastCount = pastDates.reduce(
+            (sum, d) => sum + (groupedBookings[d]?.length || 0),
+            0
+          )
+
+          return (
+            <div className="space-y-6">
+              {upcomingDates.map(renderDateSection)}
+
+              {pastDates.length > 0 && (
+                <div className="space-y-3">
+                  <button
+                    onClick={() => setShowPastDates((v) => !v)}
+                    className="w-full flex items-center justify-between p-4 bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-gray-100 text-gray-600">
+                        <Calendar className="h-5 w-5" />
+                      </div>
+                      <div className="text-left">
+                        <h3 className="font-semibold text-gray-900">Previous days</h3>
+                        <p className="text-sm text-gray-500">
+                          {pastDates.length} date{pastDates.length !== 1 ? 's' : ''} •{' '}
+                          {pastCount} booking{pastCount !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <ChevronRight
+                      className={`h-5 w-5 text-gray-400 transition-transform ${
+                        showPastDates ? 'rotate-90' : ''
+                      }`}
+                    />
+                  </button>
+                  {showPastDates && (
+                    <div className="space-y-6 pl-4 border-l-2 border-gray-200 ml-6">
+                      {pastDates.map(renderDateSection)}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {hasNoDate && renderDateSection('No Date')}
+            </div>
+          )
+        })()
       )}
 
       {/* Booking Detail Modal */}
