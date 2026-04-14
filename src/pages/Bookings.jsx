@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { format, isToday, isTomorrow, isYesterday, parseISO } from 'date-fns'
@@ -37,6 +37,8 @@ export default function Bookings() {
   const [collapsedDates, setCollapsedDates] = useState({})
   const [viewMode, setViewMode] = useState('list') // 'list' or 'calendar'
   const [showAddModal, setShowAddModal] = useState(false)
+  const initialFocusDoneRef = useRef(false)
+  const dateSectionRefs = useRef({})
 
   useEffect(() => {
     const bookingsRef = collection(db, 'bookings')
@@ -101,6 +103,45 @@ export default function Bookings() {
     if (b === 'No Date') return -1
     return new Date(b) - new Date(a)
   })
+
+  // On first load, collapse everything except today (or the next upcoming
+  // date if there are no bookings today) and scroll it into view.
+  useEffect(() => {
+    if (loading) return
+    if (initialFocusDoneRef.current) return
+    if (sortedDates.length === 0) return
+
+    const todayStr = format(new Date(), 'yyyy-MM-dd')
+    let focusDate = sortedDates.includes(todayStr) ? todayStr : null
+    if (!focusDate) {
+      // Next upcoming date >= today (sortedDates is descending, so walk
+      // from the end to find the smallest date that's still >= today).
+      const upcoming = sortedDates
+        .filter((d) => d !== 'No Date' && d >= todayStr)
+        .sort()
+      focusDate = upcoming[0] || null
+    }
+    if (!focusDate) {
+      initialFocusDoneRef.current = true
+      return
+    }
+
+    const collapsed = {}
+    sortedDates.forEach((d) => {
+      if (d !== focusDate) collapsed[d] = true
+    })
+    setCollapsedDates(collapsed)
+
+    // Scroll the focused section into view after it renders.
+    requestAnimationFrame(() => {
+      const el = dateSectionRefs.current[focusDate]
+      if (el && typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    })
+
+    initialFocusDoneRef.current = true
+  }, [loading, sortedDates])
 
   const toggleDateCollapse = (date) => {
     setCollapsedDates((prev) => ({
@@ -374,7 +415,14 @@ export default function Bookings() {
             const confirmedCount = dateBookings.filter((b) => b.status === 'confirmed').length
 
             return (
-              <div key={date} className="space-y-3">
+              <div
+                key={date}
+                ref={(el) => {
+                  if (el) dateSectionRefs.current[date] = el
+                  else delete dateSectionRefs.current[date]
+                }}
+                className="space-y-3 scroll-mt-4"
+              >
                 {/* Date Header */}
                 <button
                   onClick={() => toggleDateCollapse(date)}
