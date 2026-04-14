@@ -101,10 +101,15 @@ export default function Settings() {
       setBookingError('Pickup end time must be after start time.')
       return
     }
-    const cap = Number(bookingSettings.maxPerDay)
-    if (!Number.isFinite(cap) || cap < 0) {
-      setBookingError('Max pickups per day must be 0 or greater (0 = unlimited).')
-      return
+    const normalizedWeekdayCaps = {}
+    for (const day of WEEKDAYS) {
+      const raw = bookingSettings.maxPerWeekday?.[day.value]
+      const num = Number(raw)
+      if (!Number.isFinite(num) || num < 0) {
+        setBookingError(`Max pickups for ${day.label} must be 0 or greater.`)
+        return
+      }
+      normalizedWeekdayCaps[day.value] = num
     }
 
     setSavingBooking(true)
@@ -113,7 +118,7 @@ export default function Settings() {
         ...bookingSettings,
         pickupStartHour: start,
         pickupEndHour: end,
-        maxPerDay: cap
+        maxPerWeekday: normalizedWeekdayCaps
       })
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
@@ -320,23 +325,36 @@ export default function Settings() {
             </div>
 
             <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Max Pickups Per Day</h3>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Max Pickups Per Weekday</h3>
               <p className="text-xs text-gray-500 mb-3">
-                Cap how many bookings can be scheduled for a single day. Once full, customers cannot book that date. Set to 0 for unlimited.
+                Cap how many bookings can be scheduled for each weekday. Once full, customers cannot book that date. Set to 0 for unlimited.
               </p>
-              <input
-                type="number"
-                min="0"
-                value={bookingSettings.maxPerDay}
-                onChange={(e) =>
-                  setBookingSettings((prev) => ({
-                    ...prev,
-                    maxPerDay: e.target.value === '' ? '' : Number(e.target.value)
-                  }))
-                }
-                className="input-field max-w-xs"
-                placeholder="0 = unlimited"
-              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-w-3xl">
+                {WEEKDAYS.map((day) => (
+                  <div key={day.value}>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      {day.label}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={bookingSettings.maxPerWeekday?.[day.value] ?? 0}
+                      onChange={(e) =>
+                        setBookingSettings((prev) => ({
+                          ...prev,
+                          maxPerWeekday: {
+                            ...prev.maxPerWeekday,
+                            [day.value]:
+                              e.target.value === '' ? '' : Number(e.target.value)
+                          }
+                        }))
+                      }
+                      className="input-field"
+                      placeholder="0 = unlimited"
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
 
             {bookingError && (

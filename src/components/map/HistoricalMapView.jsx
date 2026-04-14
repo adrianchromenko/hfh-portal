@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { collection, query, where, orderBy, getDocs } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { format, subDays } from 'date-fns'
-import { X, Calendar, Filter, Package, Truck } from 'lucide-react'
+import { X, Calendar, Filter, Package, Truck, Briefcase } from 'lucide-react'
 import MapView from './MapView'
 import { getDepot } from '../../utils/routing'
 
@@ -63,14 +63,18 @@ export default function HistoricalMapView({ onClose }) {
     fetchHistoricalData()
   }
 
-  const filteredBookings = filterType === 'all' 
-    ? bookings 
-    : bookings.filter(b => b.type === filterType)
+  const filteredBookings = (() => {
+    if (filterType === 'all') return bookings
+    if (filterType === 'business') return bookings.filter(b => b.isBusiness)
+    if (filterType === 'regular') return bookings.filter(b => !b.isBusiness && b.type !== 'delivery')
+    return bookings.filter(b => b.type === filterType)
+  })()
 
   const stats = {
     total: filteredBookings.length,
     pickups: filteredBookings.filter(b => b.type !== 'delivery').length,
-    deliveries: filteredBookings.filter(b => b.type === 'delivery').length
+    deliveries: filteredBookings.filter(b => b.type === 'delivery').length,
+    businesses: filteredBookings.filter(b => b.isBusiness).length
   }
 
   return (
@@ -116,14 +120,16 @@ export default function HistoricalMapView({ onClose }) {
             
             <div className="flex items-center gap-2">
               <Filter className="h-4 w-4 text-gray-500" />
-              <select 
-                value={filterType} 
+              <select
+                value={filterType}
                 onChange={(e) => setFilterType(e.target.value)}
                 className="input-field w-auto text-sm py-1"
               >
                 <option value="all">All Types</option>
                 <option value="pickup">Pickups Only</option>
                 <option value="delivery">Deliveries Only</option>
+                <option value="business">Businesses Only</option>
+                <option value="regular">Regular Pickups (no businesses)</option>
               </select>
             </div>
 
@@ -140,6 +146,10 @@ export default function HistoricalMapView({ onClose }) {
               <div className="flex items-center gap-1">
                 <Truck className="h-4 w-4 text-orange-600" />
                 <span className="text-gray-600">{stats.deliveries} deliveries</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Briefcase className="h-4 w-4 text-pink-600" />
+                <span className="text-gray-600">{stats.businesses} businesses</span>
               </div>
             </div>
           </form>

@@ -6,9 +6,10 @@ import {
   subscribeBookingSettings,
   isDateBlocked,
   countBookingsOnDate,
+  getMaxForDate,
   DEFAULT_BOOKING_SETTINGS
 } from '../utils/bookingSettings'
-import { X, Plus, Repeat, AlertTriangle } from 'lucide-react'
+import { X, Plus, Repeat, AlertTriangle, Briefcase } from 'lucide-react'
 import { format, addWeeks } from 'date-fns'
 
 export default function AddBookingModal({ onClose }) {
@@ -36,6 +37,7 @@ export default function AddBookingModal({ onClose }) {
     notes: '',
     status: 'pending',
     type: 'pickup',
+    isBusiness: false,
     recurring: false,
     recurringFrequency: 'weekly',
     recurringWeeks: '8'
@@ -58,13 +60,11 @@ export default function AddBookingModal({ onClose }) {
       }
     }
 
-    const dateCheck = isDateBlocked(formData.date, bookingSettings)
-    if (dateCheck.blocked) {
-      setError(`${dateCheck.reason} Please choose a different date.`)
-      return
-    }
+    // Note: blocked dates are intentionally allowed for manual bookings —
+    // staff override the public booking form restrictions when needed
+    // (e.g. recurring business pickups on otherwise blocked weekdays).
 
-    const cap = Number(bookingSettings.maxPerDay) || 0
+    const cap = getMaxForDate(formData.date, bookingSettings)
     if (cap > 0) {
       try {
         const existing = await countBookingsOnDate(formData.date)
@@ -178,6 +178,21 @@ export default function AddBookingModal({ onClose }) {
             </div>
           </div>
 
+          <label className="flex items-center gap-3 cursor-pointer p-3 bg-pink-50 rounded-lg border border-pink-200">
+            <input
+              type="checkbox"
+              checked={formData.isBusiness}
+              onChange={(e) => setFormData(prev => ({ ...prev, isBusiness: e.target.checked }))}
+              className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+            />
+            <div className="flex items-center gap-2">
+              <Briefcase className="h-4 w-4 text-pink-600" />
+              <span className="text-sm font-medium text-gray-700">
+                This is a business pickup (shown in a distinct color on the map)
+              </span>
+            </div>
+          </label>
+
           {/* Customer Info */}
           <div>
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Customer Information</h3>
@@ -243,9 +258,9 @@ export default function AddBookingModal({ onClose }) {
                   const check = isDateBlocked(formData.date, bookingSettings)
                   if (!check.blocked) return null
                   return (
-                    <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
+                    <p className="mt-1 flex items-center gap-1 text-xs text-amber-600">
                       <AlertTriangle className="h-3.5 w-3.5" />
-                      {check.reason}
+                      {check.reason} Manual bookings can still be added.
                     </p>
                   )
                 })()}

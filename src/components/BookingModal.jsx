@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
+import { geocodeAddress } from '../utils/geocode'
 import { format } from 'date-fns'
 import {
   Mail,
@@ -15,13 +16,16 @@ import {
   Edit2,
   Save,
   Truck,
-  Repeat
+  Repeat,
+  Briefcase,
+  RefreshCw
 } from 'lucide-react'
 import StatusBadge from './StatusBadge'
 
 export default function BookingModal({ booking, onClose, onUpdateStatus, onDelete, onApprove, onDeny }) {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [remapping, setRemapping] = useState(false)
   const [editData, setEditData] = useState({
     name: booking.name || '',
     email: booking.email || '',
@@ -33,28 +37,100 @@ export default function BookingModal({ booking, onClose, onUpdateStatus, onDelet
     state: booking.state || '',
     zip: booking.zip || '',
     items: booking.items || '',
-    notes: booking.notes || ''
+    notes: booking.notes || '',
+    isBusiness: Boolean(booking.isBusiness)
   })
 
   const handleEditChange = (e) => {
-    setEditData(prev => ({ ...prev, [e.target.name]: e.target.value }))
+    const { name, value, type, checked } = e.target
+    setEditData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }))
   }
 
   const handleSave = async () => {
     setSaving(true)
     try {
-      await updateDoc(doc(db, 'bookings', booking.id), {
+      const addressChanged =
+        booking.address !== editData.address ||
+        booking.apartment !== editData.apartment ||
+        booking.city !== editData.city ||
+        booking.state !== editData.state ||
+        booking.zip !== editData.zip
+
+      const updates = {
         ...editData,
         updatedAt: serverTimestamp()
-      })
+      }
+
+      if (addressChanged) {
+        let coords = null
+        try {
+          coords = await geocodeAddress(
+            editData.address,
+            editData.city,
+            editData.state,
+            editData.zip
+          )
+        } catch (geoErr) {
+          console.warn('Geocoding failed on edit:', geoErr)
+        }
+        if (coords) {
+          updates.lat = coords.lat
+          updates.lng = coords.lng
+        } else {
+          // Let the map retry later instead of freezing as a failed row
+          updates.lat = null
+          updates.lng = null
+        }
+      }
+
+      await updateDoc(doc(db, 'bookings', booking.id), updates)
       setEditing(false)
       // Update the booking object in place so the modal reflects changes
-      Object.assign(booking, editData)
+      Object.assign(booking, updates)
     } catch (error) {
       console.error('Error updating booking:', error)
       alert('Error saving changes. Please try again.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleRemap = async () => {
+    setRemapping(true)
+    try {
+      let coords = null
+      try {
+        coords = await geocodeAddress(
+          booking.address,
+          booking.city,
+          booking.state,
+          booking.zip
+        )
+      } catch (geoErr) {
+        console.warn('Geocoding failed on remap:', geoErr)
+      }
+
+      const updates = {
+        lat: coords?.lat ?? null,
+        lng: coords?.lng ?? null,
+        updatedAt: serverTimestamp()
+      }
+      await updateDoc(doc(db, 'bookings', booking.id), updates)
+      Object.assign(booking, updates)
+
+      if (coords) {
+        alert('Address re-mapped successfully.')
+      } else {
+        alert('Could not find this address on the map. Double-check the street, city, and postal code.')
+      }
+    } catch (error) {
+      console.error('Error remapping booking:', error)
+      alert('Error re-mapping address. Please try again.')
+    } finally {
+      setRemapping(false)
     }
   }
 
@@ -88,6 +164,12 @@ export default function BookingModal({ booking, onClose, onUpdateStatus, onDelet
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
                       <Repeat className="h-3 w-3" />
                       {booking.recurringFrequency === 'weekly' ? 'Weekly' : booking.recurringFrequency === 'biweekly' ? 'Bi-weekly' : 'Monthly'}
+                    </span>
+                  )}
+                  {booking.isBusiness && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-pink-100 text-pink-700">
+                      <Briefcase className="h-3 w-3" />
+                      Business
                     </span>
                   )}
                 </>
@@ -140,6 +222,23 @@ export default function BookingModal({ booking, onClose, onUpdateStatus, onDelet
               ))}
             </div>
           </div>
+
+          {/* Business toggle (edit mode only) */}
+          {editing && (
+            <label className="flex items-center gap-3 cursor-pointer p-3 bg-pink-50 rounded-lg border border-pink-200">
+              <input
+                type="checkbox"
+                name="isBusiness"
+                checked={editData.isBusiness}
+                onChange={handleEditChange}
+                className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+              />
+              <div className="flex items-center gap-2">
+                <Briefcase className="h-4 w-4 text-pink-600" />
+                <span className="text-sm font-medium text-gray-700">Business pickup</span>
+              </div>
+            </label>
+          )}
 
           {/* Contact Info */}
           <div>
@@ -254,7 +353,7 @@ export default function BookingModal({ booking, onClose, onUpdateStatus, onDelet
             ) : (
               <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
                 <MapPin className="h-5 w-5 text-gray-400 mt-0.5" />
-                <div>
+                <div className="flex-1">
                   <p className="font-medium">
                     {booking.address}
                     {booking.apartment && <span className="text-gray-500 ml-1">({booking.apartment})</span>}
@@ -262,16 +361,37 @@ export default function BookingModal({ booking, onClose, onUpdateStatus, onDelet
                   <p className="text-gray-600">
                     {booking.city}, {booking.state} {booking.zip}
                   </p>
-                  <a
-                    href={`https://maps.google.com/?q=${encodeURIComponent(
-                      `${booking.address}, ${booking.city}, ${booking.state} ${booking.zip}`
-                    )}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-habitat-green hover:underline mt-1 inline-block"
-                  >
-                    Open in Google Maps
-                  </a>
+                  <div className="flex items-center gap-3 mt-1">
+                    <a
+                      href={`https://maps.google.com/?q=${encodeURIComponent(
+                        `${booking.address}, ${booking.city}, ${booking.state} ${booking.zip}`
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-habitat-green hover:underline"
+                    >
+                      Open in Google Maps
+                    </a>
+                    <button
+                      type="button"
+                      onClick={handleRemap}
+                      disabled={remapping}
+                      className="flex items-center gap-1 text-sm text-habitat-green hover:underline disabled:opacity-50"
+                      title="Retry geocoding for this address"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${remapping ? 'animate-spin' : ''}`} />
+                      {remapping ? 'Re-mapping...' : 'Re-map address'}
+                    </button>
+                  </div>
+                  {booking.lat === false || booking.lng === false ? (
+                    <p className="text-xs text-amber-600 mt-1">
+                      This address could not be placed on the map. Click "Re-map address" after correcting it.
+                    </p>
+                  ) : booking.lat == null || booking.lng == null ? (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Not yet geocoded — will be mapped on the next Route Map load.
+                    </p>
+                  ) : null}
                 </div>
               </div>
             )}

@@ -9,7 +9,6 @@ import {
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { addDays, addWeeks, format, startOfDay } from 'date-fns'
-import { isDateBlocked } from './bookingSettings'
 
 export const DEFAULT_HORIZON_WEEKS = 52
 export const TOPUP_THRESHOLD_WEEKS = 26
@@ -22,7 +21,7 @@ function stepDays(frequency) {
   return 28 // monthly (every 4 weeks)
 }
 
-function computeScheduleDates(schedule, fromDate, throughDate, bookingSettings) {
+function computeScheduleDates(schedule, fromDate, throughDate) {
   if (!schedule?.startDate || schedule.dayOfWeek == null) return []
   const start = new Date(schedule.startDate + 'T12:00:00')
   if (isNaN(start.getTime())) return []
@@ -33,13 +32,14 @@ function computeScheduleDates(schedule, fromDate, throughDate, bookingSettings) 
   const offset = (targetDay - startDay + 7) % 7
   let current = addDays(start, offset)
 
+  // Customer recurring schedules are set up internally by staff and
+  // intentionally bypass the public booking form's blocked days/dates —
+  // a Home Depot recurring pickup should still generate even if the
+  // weekday is paused for public bookings.
   const dates = []
   while (current <= throughDate) {
     if (current >= fromDate) {
-      const dateStr = format(current, 'yyyy-MM-dd')
-      if (!isDateBlocked(dateStr, bookingSettings).blocked) {
-        dates.push(dateStr)
-      }
+      dates.push(format(current, 'yyyy-MM-dd'))
     }
     current = addDays(current, step)
   }

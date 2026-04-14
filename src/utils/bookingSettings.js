@@ -12,13 +12,31 @@ import { db } from '../firebase'
 
 export const SETTINGS_DOC_PATH = ['settings', 'booking']
 
+export const WEEKDAY_NAMES = [
+  'sunday',
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday'
+]
+
+function emptyWeekdayMap() {
+  return WEEKDAY_NAMES.reduce((acc, d) => {
+    acc[d] = 0
+    return acc
+  }, {})
+}
+
 export const DEFAULT_BOOKING_SETTINGS = {
   bookingDays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
   blockedDays: [],
   blockedDates: [],
   pickupStartHour: 10,
   pickupEndHour: 16,
-  maxPerDay: 0
+  maxPerDay: 0,
+  maxPerWeekday: emptyWeekdayMap()
 }
 
 const DAY_NAME_TO_INDEX = {
@@ -45,6 +63,17 @@ function normalize(data) {
     ? merged.pickupEndHour
     : DEFAULT_BOOKING_SETTINGS.pickupEndHour
   merged.maxPerDay = Number.isFinite(merged.maxPerDay) ? merged.maxPerDay : 0
+
+  const mpw = emptyWeekdayMap()
+  const incoming =
+    merged.maxPerWeekday && typeof merged.maxPerWeekday === 'object'
+      ? merged.maxPerWeekday
+      : {}
+  for (const day of WEEKDAY_NAMES) {
+    const v = Number(incoming[day])
+    mpw[day] = Number.isFinite(v) && v >= 0 ? v : 0
+  }
+  merged.maxPerWeekday = mpw
   return merged
 }
 
@@ -66,6 +95,7 @@ export async function saveBookingSettings(settings) {
       pickupStartHour: settings.pickupStartHour,
       pickupEndHour: settings.pickupEndHour,
       maxPerDay: settings.maxPerDay,
+      maxPerWeekday: settings.maxPerWeekday,
       updatedAt: serverTimestamp()
     },
     { merge: true }
@@ -109,9 +139,20 @@ export async function countBookingsOnDate(dateString) {
   return count
 }
 
+export function getMaxForDate(dateString, settings) {
+  if (!dateString) return 0
+  const date = new Date(dateString + 'T12:00:00')
+  if (isNaN(date.getTime())) return 0
+  const weekdayName = WEEKDAY_NAMES[date.getDay()]
+  const perWeekday = Number(settings?.maxPerWeekday?.[weekdayName])
+  if (Number.isFinite(perWeekday) && perWeekday > 0) return perWeekday
+  const legacy = Number(settings?.maxPerDay) || 0
+  return legacy > 0 ? legacy : 0
+}
+
 export async function isDateAtCapacity(dateString, settings) {
-  const cap = settings?.maxPerDay || 0
-  if (!cap || cap <= 0) return false
+  const cap = getMaxForDate(dateString, settings)
+  if (!cap) return false
   const count = await countBookingsOnDate(dateString)
   return count >= cap
 }

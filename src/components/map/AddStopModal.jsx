@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { geocodeAddress } from '../../utils/geocode'
-import { X } from 'lucide-react'
+import { X, Briefcase } from 'lucide-react'
 
 export default function AddStopModal({ selectedDate, onClose }) {
   const [type, setType] = useState('pickup')
+  const [isBusiness, setIsBusiness] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [formData, setFormData] = useState({
@@ -53,6 +54,7 @@ export default function AddStopModal({ selectedDate, onClose }) {
         ...formData,
         date: selectedDate,
         type,
+        isBusiness,
         lat: coords?.lat || null,
         lng: coords?.lng || null,
         status: 'confirmed',
@@ -106,6 +108,19 @@ export default function AddStopModal({ selectedDate, onClose }) {
               ))}
             </div>
           </div>
+
+          <label className="flex items-center gap-3 cursor-pointer p-3 bg-pink-50 rounded-lg border border-pink-200">
+            <input
+              type="checkbox"
+              checked={isBusiness}
+              onChange={(e) => setIsBusiness(e.target.checked)}
+              className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+            />
+            <div className="flex items-center gap-2">
+              <Briefcase className="h-4 w-4 text-pink-600" />
+              <span className="text-sm font-medium text-gray-700">Business pickup</span>
+            </div>
+          </label>
 
           {/* Contact */}
           <div>

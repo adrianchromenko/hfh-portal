@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { collection, query, where, orderBy, getDocs, Timestamp } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { format, subDays } from 'date-fns'
-import { Calendar, Package, Truck, MapPin, Clock, Filter, Map } from 'lucide-react'
+import { Calendar, Package, Truck, MapPin, Clock, Filter, Map, Briefcase } from 'lucide-react'
 import HistoricalMapView from './HistoricalMapView'
 
 export default function HistoricalView({ onClose }) {
@@ -10,7 +10,7 @@ export default function HistoricalView({ onClose }) {
   const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [bookings, setBookings] = useState([])
   const [loading, setLoading] = useState(false)
-  const [stats, setStats] = useState({ total: 0, pickups: 0, deliveries: 0 })
+  const [stats, setStats] = useState({ total: 0, pickups: 0, deliveries: 0, businesses: 0 })
   const [filterType, setFilterType] = useState('all')
   const [showMapView, setShowMapView] = useState(false)
 
@@ -29,6 +29,7 @@ export default function HistoricalView({ onClose }) {
       const data = []
       let pickupCount = 0
       let deliveryCount = 0
+      let businessCount = 0
 
       snapshot.forEach((doc) => {
         const booking = { id: doc.id, ...doc.data() }
@@ -39,6 +40,7 @@ export default function HistoricalView({ onClose }) {
           } else {
             pickupCount++
           }
+          if (booking.isBusiness) businessCount++
         }
       })
 
@@ -57,7 +59,8 @@ export default function HistoricalView({ onClose }) {
       setStats({
         total: data.length,
         pickups: pickupCount,
-        deliveries: deliveryCount
+        deliveries: deliveryCount,
+        businesses: businessCount
       })
     } catch (error) {
       console.error('Error fetching historical data:', error)
@@ -75,9 +78,12 @@ export default function HistoricalView({ onClose }) {
     fetchHistoricalData()
   }
 
-  const filteredBookings = filterType === 'all' 
-    ? bookings 
-    : bookings.filter(b => b.type === filterType)
+  const filteredBookings = (() => {
+    if (filterType === 'all') return bookings
+    if (filterType === 'business') return bookings.filter(b => b.isBusiness)
+    if (filterType === 'regular') return bookings.filter(b => !b.isBusiness && b.type !== 'delivery')
+    return bookings.filter(b => b.type === filterType)
+  })()
 
   const getTypeColor = (type) => {
     return type === 'delivery' 
@@ -134,14 +140,16 @@ export default function HistoricalView({ onClose }) {
             
             <div className="flex items-center gap-2">
               <Filter className="h-5 w-5 text-gray-500" />
-              <select 
-                value={filterType} 
+              <select
+                value={filterType}
                 onChange={(e) => setFilterType(e.target.value)}
                 className="input-field w-auto"
               >
                 <option value="all">All Types</option>
                 <option value="pickup">Pickups Only</option>
                 <option value="delivery">Deliveries Only</option>
+                <option value="business">Businesses Only</option>
+                <option value="regular">Regular Pickups (no businesses)</option>
               </select>
             </div>
 
@@ -175,6 +183,10 @@ export default function HistoricalView({ onClose }) {
                 <div className="w-2 h-2 bg-orange-600 rounded-full"></div>
                 <span className="text-sm text-gray-600">Deliveries: {stats.deliveries}</span>
               </div>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-pink-600 rounded-full"></div>
+                <span className="text-sm text-gray-600">Businesses: {stats.businesses}</span>
+              </div>
             </div>
           )}
         </div>
@@ -207,6 +219,12 @@ export default function HistoricalView({ onClose }) {
                           <span className={`px-2 py-1 text-xs font-medium rounded-full border ${getTypeColor(booking.type || 'pickup')}`}>
                             {booking.type === 'delivery' ? 'Delivery' : 'Pickup'}
                           </span>
+                          {booking.isBusiness && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full border bg-pink-100 text-pink-800 border-pink-200">
+                              <Briefcase className="h-3 w-3" />
+                              Business
+                            </span>
+                          )}
                         </div>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-600">
