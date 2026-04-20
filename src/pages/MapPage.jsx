@@ -191,9 +191,9 @@ export default function MapPage() {
       )}
 
       {/* Map + Panel layout */}
-      <div className="flex flex-col lg:flex-row gap-4" style={{ height: 'calc(100vh - 14rem)' }}>
+      <div className="flex flex-col lg:flex-row gap-4 lg:h-[calc(100vh-14rem)]">
         {/* Map */}
-        <div className="flex-1 lg:flex-[2] card p-0 overflow-hidden" ref={mapRef}>
+        <div className="card p-0 overflow-hidden h-[60vh] lg:h-auto lg:flex-[2]" ref={mapRef}>
           <MapView
             stops={routeData ? routeData.orderedStops : bookings}
             depot={depot}
@@ -203,7 +203,7 @@ export default function MapPage() {
         </div>
 
         {/* Route panel */}
-        <div className="lg:flex-1 card p-0 overflow-hidden" style={{ maxHeight: 'calc(100vh - 14rem)' }}>
+        <div className="card p-0 overflow-hidden h-[60vh] lg:h-auto lg:flex-1">
           <RoutePanel
             stops={bookings}
             routeData={routeData}
