@@ -1,0 +1,22 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Donor photo uploads from the public booking form.
+    // Anonymous uploads allowed but capped at 5MB and images only.
+    // Reads are admin-only (donor photos are PII-adjacent).
+    match /bookings/{fileName} {
+      allow read: if request.auth != null;
+      allow create: if
+        request.resource.size < 5 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
+      allow update, delete: if request.auth != null;
+    }
+
+    // Everything else admin-only.
+    match /{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

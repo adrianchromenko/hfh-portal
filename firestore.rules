@@ -3,15 +3,54 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Public read for the WordPress booking form so it can fetch blocked
-    // days/dates. Only authenticated dashboard admins can modify it.
+    // Public read for the Shopify/WordPress booking form so it can fetch
+    // available days, blocked dates, and pickup hours. Only authenticated
+    // dashboard admins can modify settings.
     match /settings/booking {
       allow read: if true;
       allow write: if request.auth != null;
     }
 
-    // Everything else (bookings, customers, users, etc.) requires a
-    // signed-in dashboard admin.
+    // Bookings:
+    //  - Anonymous CREATE is allowed from the public form, but the document
+    //    must pass validation (required fields, no spoofed status/auth flags,
+    //    reasonable size limits).
+    //  - READ / UPDATE / DELETE are admin-only — donor PII (name, email,
+    //    phone, address) must never be publicly readable.
+    match /bookings/{bookingId} {
+      allow read, update, delete: if request.auth != null;
+
+      allow create: if
+        // Required string fields, non-empty, length-capped.
+        request.resource.data.name is string     && request.resource.data.name.size()    > 0 && request.resource.data.name.size()    <= 200 &&
+        request.resource.data.email is string    && request.resource.data.email.size()   > 0 && request.resource.data.email.size()   <= 200 &&
+        request.resource.data.phone is string    && request.resource.data.phone.size()   > 0 && request.resource.data.phone.size()   <= 50  &&
+        request.resource.data.address is string  && request.resource.data.address.size() > 0 && request.resource.data.address.size() <= 300 &&
+        request.resource.data.city is string     && request.resource.data.city.size()    > 0 && request.resource.data.city.size()    <= 100 &&
+        request.resource.data.state is string    && request.resource.data.state.size()   > 0 && request.resource.data.state.size()   <= 100 &&
+        request.resource.data.zip is string      && request.resource.data.zip.size()     > 0 && request.resource.data.zip.size()     <= 20  &&
+        request.resource.data.date is string     && request.resource.data.date.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+        request.resource.data.items is string    && request.resource.data.items.size()   > 0 && request.resource.data.items.size()   <= 2000 &&
+
+        // Optional fields must be strings if present.
+        (!('apartment' in request.resource.data) || (request.resource.data.apartment is string && request.resource.data.apartment.size() <= 100)) &&
+        (!('notes' in request.resource.data)     || (request.resource.data.notes     is string && request.resource.data.notes.size()     <= 2000)) &&
+
+        // Photos must be an array of download URLs (max 5).
+        (!('photos' in request.resource.data) ||
+          (request.resource.data.photos is list && request.resource.data.photos.size() <= 5)) &&
+
+        // Status must start as 'pending' (admin flips it later).
+        request.resource.data.status == 'pending' &&
+
+        // Source tag — lets us trace where a booking came from.
+        request.resource.data.source in ['shopify-widget', 'wordpress-plugin'] &&
+
+        // createdAt must be the server timestamp (prevents client backdating).
+        request.resource.data.createdAt == request.time;
+    }
+
+    // Everything else (customers, users, routes, etc.) is admin-only.
     match /{document=**} {
       allow read, write: if request.auth != null;
     }
