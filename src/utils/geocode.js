@@ -35,9 +35,38 @@ export async function geocodeAddress(address, city, state, zip) {
   const houseNumber = extractHouseNumber(address)
   const street = address?.trim() || ''
 
-  // 1) Structured query — much more accurate than free-form for specific
-  // house numbers on long streets (Nominatim otherwise tends to snap to
-  // the street centroid, which lands downtown on long roads like Queen St).
+  // 1) Postal-code-first query — a full 6-char Canadian postal code pins
+  // a small block, so "street + postalcode" often resolves more precisely
+  // than adding city/state (which can pull Nominatim toward a street's
+  // downtown segment on long roads like Queen St).
+  let results = []
+  if (zip) {
+    const zipFirst = new URLSearchParams({
+      street,
+      postalcode: zip,
+      country: 'Canada',
+      format: 'json',
+      addressdetails: '1',
+      limit: '5',
+      countrycodes: 'ca'
+    })
+    try {
+      results = await queryNominatim(zipFirst)
+    } catch {
+      results = []
+    }
+
+    if (houseNumber && results.length) {
+      const target = normalizeNumber(houseNumber)
+      const exact = results.find(r => normalizeNumber(r.address?.house_number) === target)
+      if (exact) {
+        return { lat: parseFloat(exact.lat), lng: parseFloat(exact.lon) }
+      }
+    }
+  }
+
+  // 2) Structured query with full address components — fallback when the
+  // postal code isn't known or didn't return an exact house-number match.
   const structured = new URLSearchParams({
     street,
     city: city || '',
@@ -50,11 +79,11 @@ export async function geocodeAddress(address, city, state, zip) {
   })
   if (zip) structured.set('postalcode', zip)
 
-  let results = []
   try {
-    results = await queryNominatim(structured)
+    const structuredResults = await queryNominatim(structured)
+    if (structuredResults.length) results = structuredResults
   } catch {
-    results = []
+    // keep whatever zip-first found, if anything
   }
 
   // Prefer a result whose returned house_number matches ours.
@@ -74,7 +103,7 @@ export async function geocodeAddress(address, city, state, zip) {
     return { lat: parseFloat(results[0].lat), lng: parseFloat(results[0].lon) }
   }
 
-  // 2) Free-form fallback with addressdetails, still filtered by country.
+  // 3) Free-form fallback with addressdetails, still filtered by country.
   const freeform = new URLSearchParams({
     q: `${address}, ${city}, ${state}${zip ? ' ' + zip : ''}, Canada`,
     format: 'json',
