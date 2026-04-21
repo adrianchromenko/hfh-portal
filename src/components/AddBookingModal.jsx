@@ -15,6 +15,8 @@ import { format, addWeeks } from 'date-fns'
 export default function AddBookingModal({ onClose }) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [capacityWarning, setCapacityWarning] = useState('')
+  const [overrideCapacity, setOverrideCapacity] = useState(false)
   const [bookingSettings, setBookingSettings] = useState(DEFAULT_BOOKING_SETTINGS)
 
   useEffect(() => {
@@ -44,7 +46,12 @@ export default function AddBookingModal({ onClose }) {
   })
 
   const handleChange = (e) => {
-    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
+    const { name, value } = e.target
+    setFormData(prev => ({ ...prev, [name]: value }))
+    if (name === 'date') {
+      setCapacityWarning('')
+      setOverrideCapacity(false)
+    }
   }
 
   const handleSubmit = async (e) => {
@@ -65,11 +72,12 @@ export default function AddBookingModal({ onClose }) {
     // (e.g. recurring business pickups on otherwise blocked weekdays).
 
     const cap = getMaxForDate(formData.date, bookingSettings)
-    if (cap > 0) {
+    if (cap > 0 && !overrideCapacity) {
       try {
         const existing = await countBookingsOnDate(formData.date)
         if (existing >= cap) {
-          setError(`This date is full (${existing}/${cap} bookings). Please choose a different date or raise the daily cap in Settings.`)
+          setCapacityWarning(`This date is full for customers (${existing}/${cap} bookings). Click "Add Booking" again to override and add anyway.`)
+          setOverrideCapacity(true)
           return
         }
       } catch (capErr) {
@@ -439,6 +447,13 @@ export default function AddBookingModal({ onClose }) {
 
           {error && (
             <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">{error}</p>
+          )}
+
+          {capacityWarning && (
+            <p className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 p-3 rounded-lg">
+              <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <span>{capacityWarning}</span>
+            </p>
           )}
 
           {/* Actions */}
