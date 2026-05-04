@@ -3,7 +3,7 @@ import { collection, query, where, orderBy, onSnapshot, doc, updateDoc } from 'f
 import { db } from '../firebase'
 import { format } from 'date-fns'
 import { Plus, Loader2, Printer, Download, History } from 'lucide-react'
-import { geocodeAddress } from '../utils/geocode'
+import { geocodeAddress, isWithinSsmBounds } from '../utils/geocode'
 import { optimizeRoute, getDepot } from '../utils/routing'
 import MapView from '../components/map/MapView'
 import RoutePanel from '../components/map/RoutePanel'
@@ -53,9 +53,16 @@ export default function MapPage() {
     return () => unsubscribe()
   }, [selectedDate])
 
-  // Geocode bookings that are missing coordinates
+  // Geocode bookings that are missing coordinates — or whose stored
+  // coordinates fall outside SSM (legacy data from before we bounded the
+  // geocoder). `lat === false` is the "tried and failed" sentinel; leave it
+  // alone so we don't retry forever on truly unmappable addresses.
   useEffect(() => {
-    const ungeocodedBookings = bookings.filter(b => b.lat == null || b.lng == null)
+    const ungeocodedBookings = bookings.filter(b => {
+      if (b.lat == null || b.lng == null) return true
+      if (b.lat === false || b.lng === false) return false
+      return !isWithinSsmBounds(b.lat, b.lng)
+    })
     if (ungeocodedBookings.length === 0) {
       setGeocodingStatus('')
       return

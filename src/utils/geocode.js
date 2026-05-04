@@ -1,6 +1,13 @@
 const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search'
 const RATE_LIMIT_MS = 1100 // Nominatim requires max 1 request/sec
 
+// Bounding box around Sault Ste. Marie + a buffer for nearby rural pickups
+// (Goulais River, Heyden, Echo Bay, etc). Format: lon_left,lat_top,lon_right,lat_bottom.
+// Nominatim's countrycodes=ca alone isn't enough — common street names like
+// "Queen St" still resolve to Toronto. bounded=1 + this viewbox keeps results
+// in our service area or returns nothing.
+const SSM_VIEWBOX = '-84.70,46.75,-84.00,46.35'
+
 let lastRequestTime = 0
 
 async function throttle() {
@@ -10,6 +17,21 @@ async function throttle() {
     await new Promise(r => setTimeout(r, RATE_LIMIT_MS - elapsed))
   }
   lastRequestTime = Date.now()
+}
+
+function applySsmBounds(params) {
+  params.set('viewbox', SSM_VIEWBOX)
+  params.set('bounded', '1')
+  return params
+}
+
+// Sanity check for stored coordinates. Older bookings were geocoded without
+// the SSM viewbox and sometimes landed in the wrong city (Queen St → Toronto).
+// Returns true if the point is plausibly in our service area.
+export function isWithinSsmBounds(lat, lng) {
+  if (typeof lat !== 'number' || typeof lng !== 'number') return false
+  if (Number.isNaN(lat) || Number.isNaN(lng)) return false
+  return lat >= 46.35 && lat <= 46.75 && lng >= -84.70 && lng <= -84.00
 }
 
 async function queryNominatim(params) {
@@ -41,7 +63,7 @@ export async function geocodeAddress(address, city, state, zip) {
   // downtown segment on long roads like Queen St).
   let results = []
   if (zip) {
-    const zipFirst = new URLSearchParams({
+    const zipFirst = applySsmBounds(new URLSearchParams({
       street,
       postalcode: zip,
       country: 'Canada',
@@ -49,7 +71,7 @@ export async function geocodeAddress(address, city, state, zip) {
       addressdetails: '1',
       limit: '5',
       countrycodes: 'ca'
-    })
+    }))
     try {
       results = await queryNominatim(zipFirst)
     } catch {
@@ -67,7 +89,7 @@ export async function geocodeAddress(address, city, state, zip) {
 
   // 2) Structured query with full address components — fallback when the
   // postal code isn't known or didn't return an exact house-number match.
-  const structured = new URLSearchParams({
+  const structured = applySsmBounds(new URLSearchParams({
     street,
     city: city || '',
     state: state || '',
@@ -76,7 +98,7 @@ export async function geocodeAddress(address, city, state, zip) {
     addressdetails: '1',
     limit: '5',
     countrycodes: 'ca'
-  })
+  }))
   if (zip) structured.set('postalcode', zip)
 
   try {
@@ -104,13 +126,13 @@ export async function geocodeAddress(address, city, state, zip) {
   }
 
   // 3) Free-form fallback with addressdetails, still filtered by country.
-  const freeform = new URLSearchParams({
+  const freeform = applySsmBounds(new URLSearchParams({
     q: `${address}, ${city}, ${state}${zip ? ' ' + zip : ''}, Canada`,
     format: 'json',
     addressdetails: '1',
     limit: '5',
     countrycodes: 'ca'
-  })
+  }))
 
   let fallback = []
   try {

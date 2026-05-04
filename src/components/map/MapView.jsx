@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { isWithinSsmBounds } from '../../utils/geocode'
 
 // Fix Leaflet default marker icons in Vite
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
@@ -45,7 +46,8 @@ function FitBounds({ stops, depot }) {
   const map = useMap()
 
   useEffect(() => {
-    const points = [depot, ...stops.filter(s => s.lat && s.lng)].map(s => [s.lat, s.lng])
+    const inAreaStops = stops.filter(s => isWithinSsmBounds(s.lat, s.lng))
+    const points = [depot, ...inAreaStops].map(s => [s.lat, s.lng])
     if (points.length > 0) {
       map.fitBounds(points, { padding: [40, 40], maxZoom: 14 })
     }
@@ -87,7 +89,7 @@ export default function MapView({ stops, depot, routeGeometry, onStopClick }) {
 
       {/* Stop markers */}
       {stops.map((stop, index) => {
-        if (!stop.lat || !stop.lng) return null
+        if (!isWithinSsmBounds(stop.lat, stop.lng)) return null
         const type = stop.type || 'pickup'
         return (
           <Marker
