@@ -18,7 +18,9 @@ import {
   Truck,
   Repeat,
   Briefcase,
-  RefreshCw
+  RefreshCw,
+  Store,
+  Globe
 } from 'lucide-react'
 import StatusBadge from './StatusBadge'
 
@@ -170,6 +172,23 @@ export default function BookingModal({ booking, onClose, onUpdateStatus, onDelet
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-pink-100 text-pink-700">
                       <Briefcase className="h-3 w-3" />
                       Business
+                    </span>
+                  )}
+                  {booking.manualEntry ? (
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700"
+                      title="Added manually from the store"
+                    >
+                      <Store className="h-3 w-3" />
+                      In-Store
+                    </span>
+                  ) : (
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700"
+                      title="Submitted by customer through online form"
+                    >
+                      <Globe className="h-3 w-3" />
+                      Online
                     </span>
                   )}
                 </>

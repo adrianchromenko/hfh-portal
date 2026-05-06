@@ -12,7 +12,9 @@ import {
   Package,
   BarChart3,
   Users,
-  Truck
+  Truck,
+  Globe,
+  Store
 } from 'lucide-react'
 import StatusBadge from '../components/StatusBadge'
 import BookingModal from '../components/BookingModal'
@@ -31,6 +33,8 @@ export default function Dashboard() {
   const [todaysPickups, setTodaysPickups] = useState([])
   const [dayOfWeekStats, setDayOfWeekStats] = useState([0, 0, 0, 0, 0, 0, 0])
   const [timeSlotStats, setTimeSlotStats] = useState({})
+  const [sourceStats, setSourceStats] = useState({ online: 0, inStore: 0 })
+  const [recentSourceStats, setRecentSourceStats] = useState({ online: 0, inStore: 0 })
   const [selectedBooking, setSelectedBooking] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -53,10 +57,25 @@ export default function Dashboard() {
       const recent = []
       const dayStats = [0, 0, 0, 0, 0, 0, 0]
       const timeStats = {}
+      let onlineCount = 0
+      let inStoreCount = 0
+      let recentOnlineCount = 0
+      let recentInStoreCount = 0
+      const thirtyDaysAgo = subDays(today, 30)
 
       snapshot.forEach((doc) => {
         const data = { id: doc.id, ...doc.data() }
         const bookingDate = data.date ? new Date(data.date + 'T12:00:00') : null
+        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : null
+
+        // Source breakdown: online (from plugin form) vs in-store (manualEntry)
+        if (data.manualEntry === true) {
+          inStoreCount++
+          if (createdAt && createdAt >= thirtyDaysAgo) recentInStoreCount++
+        } else {
+          onlineCount++
+          if (createdAt && createdAt >= thirtyDaysAgo) recentOnlineCount++
+        }
 
         // Count stats
         if (bookingDate) {
@@ -98,6 +117,8 @@ export default function Dashboard() {
 
       setDayOfWeekStats(dayStats)
       setTimeSlotStats(timeStats)
+      setSourceStats({ online: onlineCount, inStore: inStoreCount })
+      setRecentSourceStats({ online: recentOnlineCount, inStore: recentInStoreCount })
 
       // Sort today's pickups by time
       todaysList.sort((a, b) => (a.time || '').localeCompare(b.time || ''))
@@ -108,6 +129,13 @@ export default function Dashboard() {
 
     return () => unsubscribe()
   }, [])
+
+  // Source breakdown percentages (online vs in-store)
+  const totalSourceCount = sourceStats.online + sourceStats.inStore
+  const onlinePct = totalSourceCount > 0 ? Math.round((sourceStats.online / totalSourceCount) * 100) : 0
+  const inStorePct = totalSourceCount > 0 ? 100 - onlinePct : 0
+  const recentTotalSource = recentSourceStats.online + recentSourceStats.inStore
+  const recentOnlinePct = recentTotalSource > 0 ? Math.round((recentSourceStats.online / recentTotalSource) * 100) : 0
 
   // Find busiest day
   const maxDayCount = Math.max(...dayOfWeekStats)
@@ -177,6 +205,90 @@ export default function Dashboard() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Booking Sources */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Booking Sources</h2>
+            <p className="text-sm text-gray-500">Online form vs in-store manual entries</p>
+          </div>
+          <div className="bg-habitat-green/10 p-2 rounded-lg">
+            <Globe className="h-5 w-5 text-habitat-green" />
+          </div>
+        </div>
+
+        {totalSourceCount === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <Globe className="h-12 w-12 mx-auto mb-2 opacity-50" />
+            <p>No bookings yet</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+            <div className="md:col-span-2 space-y-4">
+              {recentTotalSource > 0 && (
+                <div className="p-3 bg-sky-50 border border-sky-100 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-sky-600" />
+                    <span className="text-sm text-sky-800">
+                      <strong>{recentOnlinePct}%</strong> of the last 30 days came from the online form
+                      <span className="text-sky-600"> ({recentSourceStats.online} of {recentTotalSource})</span>
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                  <span>All-time split</span>
+                  <span>{totalSourceCount} total</span>
+                </div>
+                <div className="flex w-full h-7 rounded-full overflow-hidden bg-gray-100">
+                  {sourceStats.online > 0 && (
+                    <div
+                      className="bg-sky-500 flex items-center justify-center text-xs font-semibold text-white transition-all duration-500"
+                      style={{ width: `${onlinePct}%` }}
+                      title={`Online: ${sourceStats.online} (${onlinePct}%)`}
+                    >
+                      {onlinePct >= 12 && `${onlinePct}%`}
+                    </div>
+                  )}
+                  {sourceStats.inStore > 0 && (
+                    <div
+                      className="bg-amber-500 flex items-center justify-center text-xs font-semibold text-white transition-all duration-500"
+                      style={{ width: `${inStorePct}%` }}
+                      title={`In-Store: ${sourceStats.inStore} (${inStorePct}%)`}
+                    >
+                      {inStorePct >= 12 && `${inStorePct}%`}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-1 gap-3">
+              <div className="flex items-center gap-3 p-3 bg-sky-50 rounded-lg">
+                <div className="bg-sky-500 p-2 rounded-lg">
+                  <Globe className="h-4 w-4 text-white" />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Online</p>
+                  <p className="text-xl font-bold text-sky-700">{sourceStats.online}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-3 bg-amber-50 rounded-lg">
+                <div className="bg-amber-500 p-2 rounded-lg">
+                  <Store className="h-4 w-4 text-white" />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">In-Store</p>
+                  <p className="text-xl font-bold text-amber-700">{sourceStats.inStore}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Analytics Section */}

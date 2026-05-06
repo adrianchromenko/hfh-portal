@@ -16,7 +16,9 @@ import {
   List,
   CalendarDays,
   Plus,
-  Repeat
+  Repeat,
+  Store,
+  Globe
 } from 'lucide-react'
 import StatusBadge from '../components/StatusBadge'
 import CalendarView from '../components/CalendarView'
@@ -33,6 +35,7 @@ export default function Bookings() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [sourceFilter, setSourceFilter] = useState('all')
   const [selectedBooking, setSelectedBooking] = useState(null)
   const [collapsedDates, setCollapsedDates] = useState({})
   const [viewMode, setViewMode] = useState('list') // 'list' or 'calendar'
@@ -63,6 +66,13 @@ export default function Bookings() {
     // Filter by status
     if (statusFilter !== 'all') {
       filtered = filtered.filter((b) => b.status === statusFilter)
+    }
+
+    // Filter by source (online customer form vs manually added in-store)
+    if (sourceFilter === 'in-store') {
+      filtered = filtered.filter((b) => b.manualEntry === true)
+    } else if (sourceFilter === 'online') {
+      filtered = filtered.filter((b) => b.manualEntry !== true)
     }
 
     // Filter by search term
@@ -96,7 +106,7 @@ export default function Bookings() {
     })
 
     setGroupedBookings(grouped)
-  }, [bookings, searchTerm, statusFilter])
+  }, [bookings, searchTerm, statusFilter, sourceFilter])
 
   // Split dates into upcoming (today + future) and past, with "No Date" last.
   // Upcoming: today at top, then chronological ascending (tomorrow, day after…).
@@ -388,6 +398,21 @@ export default function Bookings() {
             </select>
             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
           </div>
+
+          {/* Source Filter */}
+          <div className="relative">
+            <select
+              value={sourceFilter}
+              onChange={(e) => setSourceFilter(e.target.value)}
+              className="input-field appearance-none pr-10 min-w-[150px]"
+              title="Filter by booking source"
+            >
+              <option value="all">All Sources</option>
+              <option value="online">Online (customer)</option>
+              <option value="in-store">In-Store (manual)</option>
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
+          </div>
         </div>
       </div>
 
@@ -468,6 +493,23 @@ export default function Bookings() {
                             <div className="flex items-center gap-3 mb-2">
                               <h3 className="font-semibold text-gray-900">{booking.name}</h3>
                               <StatusBadge status={booking.status} />
+                              {booking.manualEntry ? (
+                                <span
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700"
+                                  title="Added manually from the store"
+                                >
+                                  <Store className="h-3 w-3" />
+                                  In-Store
+                                </span>
+                              ) : (
+                                <span
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700"
+                                  title="Submitted by customer through online form"
+                                >
+                                  <Globe className="h-3 w-3" />
+                                  Online
+                                </span>
+                              )}
                               {booking.recurring && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
                                   <Repeat className="h-3 w-3" />
