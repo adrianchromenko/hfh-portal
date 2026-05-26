@@ -49,13 +49,28 @@ const DAY_NAME_TO_INDEX = {
   saturday: 6
 }
 
+// Accepts either a legacy string ("2026-06-15") or a {date, note} object and
+// returns the normalized {date, note} shape. Anything malformed becomes null.
+function normalizeBlockedDateEntry(entry) {
+  if (typeof entry === 'string') {
+    return /^\d{4}-\d{2}-\d{2}$/.test(entry) ? { date: entry, note: '' } : null
+  }
+  if (entry && typeof entry === 'object' && typeof entry.date === 'string') {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) return null
+    return { date: entry.date, note: typeof entry.note === 'string' ? entry.note : '' }
+  }
+  return null
+}
+
 function normalize(data) {
   const merged = { ...DEFAULT_BOOKING_SETTINGS, ...(data || {}) }
   merged.bookingDays = Array.isArray(merged.bookingDays)
     ? merged.bookingDays
     : DEFAULT_BOOKING_SETTINGS.bookingDays
   merged.blockedDays = Array.isArray(merged.blockedDays) ? merged.blockedDays : []
-  merged.blockedDates = Array.isArray(merged.blockedDates) ? merged.blockedDates : []
+  merged.blockedDates = Array.isArray(merged.blockedDates)
+    ? merged.blockedDates.map(normalizeBlockedDateEntry).filter(Boolean)
+    : []
   merged.pickupStartHour = Number.isFinite(merged.pickupStartHour)
     ? merged.pickupStartHour
     : DEFAULT_BOOKING_SETTINGS.pickupStartHour
@@ -86,12 +101,15 @@ export function subscribeBookingSettings(callback) {
 
 export async function saveBookingSettings(settings) {
   const ref = doc(db, ...SETTINGS_DOC_PATH)
+  const cleanedBlockedDates = (settings.blockedDates || [])
+    .map(normalizeBlockedDateEntry)
+    .filter(Boolean)
   await setDoc(
     ref,
     {
       bookingDays: settings.bookingDays,
       blockedDays: settings.blockedDays,
-      blockedDates: settings.blockedDates,
+      blockedDates: cleanedBlockedDates,
       pickupStartHour: settings.pickupStartHour,
       pickupEndHour: settings.pickupEndHour,
       maxPerDay: settings.maxPerDay,
@@ -106,8 +124,16 @@ export function isDateBlocked(dateString, settings) {
   if (!dateString) return { blocked: false }
   const { bookingDays, blockedDays, blockedDates } = settings || DEFAULT_BOOKING_SETTINGS
 
-  if ((blockedDates || []).includes(dateString)) {
-    return { blocked: true, reason: 'This date is blocked off.' }
+  const blockedMatch = (blockedDates || []).find(
+    (entry) => entry && entry.date === dateString
+  )
+  if (blockedMatch) {
+    return {
+      blocked: true,
+      reason: blockedMatch.note
+        ? `This date is blocked off: ${blockedMatch.note}`
+        : 'This date is blocked off.'
+    }
   }
 
   const date = new Date(dateString + 'T12:00:00')

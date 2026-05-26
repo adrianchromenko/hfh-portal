@@ -32,6 +32,7 @@ export default function Settings() {
 
   const [bookingSettings, setBookingSettings] = useState(DEFAULT_BOOKING_SETTINGS)
   const [newBlockedDate, setNewBlockedDate] = useState('')
+  const [newBlockedNote, setNewBlockedNote] = useState('')
   const [savingBooking, setSavingBooking] = useState(false)
   const [bookingError, setBookingError] = useState('')
 
@@ -72,19 +73,31 @@ export default function Settings() {
       return
     }
     setBookingSettings((prev) => {
-      if (prev.blockedDates.includes(newBlockedDate)) return prev
-      return {
-        ...prev,
-        blockedDates: [...prev.blockedDates, newBlockedDate].sort()
-      }
+      if (prev.blockedDates.some((entry) => entry.date === newBlockedDate)) return prev
+      const next = [
+        ...prev.blockedDates,
+        { date: newBlockedDate, note: newBlockedNote.trim() }
+      ]
+      next.sort((a, b) => a.date.localeCompare(b.date))
+      return { ...prev, blockedDates: next }
     })
     setNewBlockedDate('')
+    setNewBlockedNote('')
   }
 
   const removeBlockedDate = (date) => {
     setBookingSettings((prev) => ({
       ...prev,
-      blockedDates: prev.blockedDates.filter((d) => d !== date)
+      blockedDates: prev.blockedDates.filter((entry) => entry.date !== date)
+    }))
+  }
+
+  const updateBlockedDateNote = (date, note) => {
+    setBookingSettings((prev) => ({
+      ...prev,
+      blockedDates: prev.blockedDates.map((entry) =>
+        entry.date === date ? { ...entry, note } : entry
+      )
     }))
   }
 
@@ -236,12 +249,20 @@ export default function Settings() {
               <p className="text-xs text-gray-500 mb-3">
                 Block individual dates for holidays, staff meetings, or closures.
               </p>
-              <div className="flex gap-2 mb-3">
+              <div className="flex flex-col sm:flex-row gap-2 mb-3">
                 <input
                   type="date"
                   value={newBlockedDate}
                   onChange={(e) => setNewBlockedDate(e.target.value)}
+                  className="input-field sm:w-44"
+                />
+                <input
+                  type="text"
+                  value={newBlockedNote}
+                  onChange={(e) => setNewBlockedNote(e.target.value)}
+                  placeholder="Reason (optional) — e.g. Canada Day, staff training"
                   className="input-field flex-1"
+                  maxLength={120}
                 />
                 <button
                   type="button"
@@ -257,17 +278,27 @@ export default function Settings() {
                 <p className="text-sm text-gray-400 italic">No specific dates blocked.</p>
               ) : (
                 <div className="space-y-2">
-                  {bookingSettings.blockedDates.map((date) => (
+                  {bookingSettings.blockedDates.map((entry) => (
                     <div
-                      key={date}
-                      className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg"
+                      key={entry.date}
+                      className="flex flex-col sm:flex-row sm:items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg"
                     >
-                      <span className="text-sm text-gray-900">{formatDateLabel(date)}</span>
+                      <span className="text-sm text-gray-900 sm:w-48 shrink-0">
+                        {formatDateLabel(entry.date)}
+                      </span>
+                      <input
+                        type="text"
+                        value={entry.note}
+                        onChange={(e) => updateBlockedDateNote(entry.date, e.target.value)}
+                        placeholder="Add a reason (optional)"
+                        className="input-field flex-1 text-sm"
+                        maxLength={120}
+                      />
                       <button
                         type="button"
-                        onClick={() => removeBlockedDate(date)}
-                        className="p-1 hover:bg-gray-200 rounded text-gray-500 hover:text-red-600"
-                        aria-label={`Remove ${date}`}
+                        onClick={() => removeBlockedDate(entry.date)}
+                        className="p-1 hover:bg-gray-200 rounded text-gray-500 hover:text-red-600 self-end sm:self-auto"
+                        aria-label={`Remove ${entry.date}`}
                       >
                         <X className="h-4 w-4" />
                       </button>
