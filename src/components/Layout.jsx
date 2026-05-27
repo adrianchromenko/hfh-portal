@@ -3,6 +3,7 @@ import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { collection, query, orderBy, limit, onSnapshot, where, Timestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
+import { subscribeFullDatesReconciler } from '../utils/bookingSettings'
 import {
   LayoutDashboard,
   CalendarDays,
@@ -104,6 +105,12 @@ export default function Layout() {
     })
 
     return unsub
+  }, [])
+
+  // Keep settings/booking.fullDates current so the customer-facing widget
+  // (which cannot read the bookings collection) can grey out full dates.
+  useEffect(() => {
+    return subscribeFullDatesReconciler()
   }, [])
 
   // Clear the unseen badge whenever the admin actually looks at the

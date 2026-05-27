@@ -183,6 +183,100 @@ export async function isDateAtCapacity(dateString, settings) {
   return count >= cap
 }
 
+// Compute which upcoming dates have hit their cap, based on a live snapshot
+// of future bookings plus the cap settings. Returns a sorted array of
+// YYYY-MM-DD strings.
+function computeFullDates(bookings, settings) {
+  const counts = {}
+  for (const b of bookings) {
+    if (b.status === 'cancelled') continue
+    if (!b.date || typeof b.date !== 'string') continue
+    counts[b.date] = (counts[b.date] || 0) + 1
+  }
+  const full = []
+  for (const date of Object.keys(counts)) {
+    const cap = getMaxForDate(date, settings)
+    if (cap > 0 && counts[date] >= cap) full.push(date)
+  }
+  full.sort()
+  return full
+}
+
+function arraysEqual(a, b) {
+  if (a === b) return true
+  if (!Array.isArray(a) || !Array.isArray(b)) return false
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+  return true
+}
+
+// Keep `settings/booking.fullDates` in sync with the live state of upcoming
+// bookings. The customer-facing booking widget cannot read the `bookings`
+// collection (PII protection) and instead reads this public array to grey out
+// dates that have hit their cap. Subscribes to settings + future bookings;
+// returns an unsubscribe function.
+export function subscribeFullDatesReconciler() {
+  let latestSettings = null
+  let latestBookings = []
+  let lastPublished = null
+  let publishInFlight = false
+
+  const todayStr = (() => {
+    const t = new Date()
+    const y = t.getFullYear()
+    const m = String(t.getMonth() + 1).padStart(2, '0')
+    const d = String(t.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  })()
+
+  async function maybePublish() {
+    if (!latestSettings) return
+    if (publishInFlight) return
+    const next = computeFullDates(latestBookings, latestSettings)
+    // The settings doc itself is the source of truth for `fullDates`, so the
+    // first pass also publishes when the doc has no array yet.
+    if (lastPublished !== null && arraysEqual(next, lastPublished)) return
+    publishInFlight = true
+    try {
+      await setDoc(
+        doc(db, ...SETTINGS_DOC_PATH),
+        { fullDates: next, fullDatesUpdatedAt: serverTimestamp() },
+        { merge: true }
+      )
+      lastPublished = next
+    } catch (err) {
+      console.warn('fullDates publish failed:', err)
+    } finally {
+      publishInFlight = false
+    }
+  }
+
+  const unsubSettings = onSnapshot(doc(db, ...SETTINGS_DOC_PATH), (snap) => {
+    const data = snap.exists() ? snap.data() : null
+    latestSettings = normalize(data)
+    // Seed lastPublished from the doc so we don't write on first load unless
+    // the computed value actually differs from what's already there.
+    if (lastPublished === null && Array.isArray(data?.fullDates)) {
+      lastPublished = [...data.fullDates].sort()
+    }
+    maybePublish()
+  })
+
+  const futureQuery = query(
+    collection(db, 'bookings'),
+    where('date', '>=', todayStr)
+  )
+  const unsubBookings = onSnapshot(futureQuery, (snap) => {
+    latestBookings = snap.docs.map((d) => d.data())
+    maybePublish()
+  })
+
+  return () => {
+    unsubSettings()
+    unsubBookings()
+  }
+}
+
 export function formatHourLabel(hour) {
   const h = Number(hour)
   if (!Number.isFinite(h)) return ''
