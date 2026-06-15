@@ -18,9 +18,11 @@ import {
   Plus,
   Repeat,
   Store,
-  Globe
+  Globe,
+  Truck
 } from 'lucide-react'
 import StatusBadge from '../components/StatusBadge'
+import { TRUCKS, truckLabel, truckBadgeClasses, matchesTruckFilter } from '../utils/trucks'
 import CalendarView from '../components/CalendarView'
 import AddBookingModal from '../components/AddBookingModal'
 import BookingModal from '../components/BookingModal'
@@ -36,6 +38,7 @@ export default function Bookings() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
+  const [truckFilter, setTruckFilter] = useState('all')
   const [selectedBooking, setSelectedBooking] = useState(null)
   const [collapsedDates, setCollapsedDates] = useState({})
   const [viewMode, setViewMode] = useState('list') // 'list' or 'calendar'
@@ -75,6 +78,11 @@ export default function Bookings() {
       filtered = filtered.filter((b) => b.manualEntry !== true)
     }
 
+    // Filter by assigned truck
+    if (truckFilter !== 'all') {
+      filtered = filtered.filter((b) => matchesTruckFilter(b.truck, truckFilter))
+    }
+
     // Filter by search term
     if (searchTerm) {
       const term = searchTerm.toLowerCase()
@@ -106,7 +114,7 @@ export default function Bookings() {
     })
 
     setGroupedBookings(grouped)
-  }, [bookings, searchTerm, statusFilter, sourceFilter])
+  }, [bookings, searchTerm, statusFilter, sourceFilter, truckFilter])
 
   // Split dates into upcoming (today + future) and past, with "No Date" last.
   // Upcoming: today at top, then chronological ascending (tomorrow, day after…).
@@ -413,6 +421,23 @@ export default function Bookings() {
             </select>
             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
           </div>
+
+          {/* Truck Filter */}
+          <div className="relative">
+            <select
+              value={truckFilter}
+              onChange={(e) => setTruckFilter(e.target.value)}
+              className="input-field appearance-none pr-10 min-w-[150px]"
+              title="Filter by assigned truck"
+            >
+              <option value="all">All Trucks</option>
+              {TRUCKS.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+              <option value="unassigned">Unassigned</option>
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
+          </div>
         </div>
       </div>
 
@@ -514,6 +539,12 @@ export default function Bookings() {
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
                                   <Repeat className="h-3 w-3" />
                                   {booking.recurringFrequency === 'weekly' ? 'Weekly' : booking.recurringFrequency === 'biweekly' ? 'Bi-weekly' : 'Monthly'}
+                                </span>
+                              )}
+                              {booking.truck && (
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${truckBadgeClasses(booking.truck)}`}>
+                                  <Truck className="h-3 w-3" />
+                                  {truckLabel(booking.truck)}
                                 </span>
                               )}
                             </div>

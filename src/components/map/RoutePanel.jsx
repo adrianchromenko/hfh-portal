@@ -1,12 +1,15 @@
-import { MapPin, Navigation, AlertTriangle, Package, Truck, Repeat } from 'lucide-react'
+import { MapPin, Navigation, AlertTriangle, Package, Truck, Repeat, Printer } from 'lucide-react'
 import StatusBadge from '../StatusBadge'
+import { truckLabel, truckBadgeClasses } from '../../utils/trucks'
 
 export default function RoutePanel({
   stops,
   routeData,
   isOptimizing,
   onOptimize,
-  onStopClick
+  onStopClick,
+  onPrint,
+  onAssignTruck
 }) {
   const displayStops = routeData ? routeData.orderedStops : stops
 
@@ -127,6 +130,12 @@ export default function RoutePanel({
                       {stop.recurringFrequency === 'weekly' ? 'Weekly' : stop.recurringFrequency === 'biweekly' ? 'Bi-weekly' : 'Monthly'}
                     </span>
                   )}
+                  {stop.truck && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium flex items-center gap-0.5 ${truckBadgeClasses(stop.truck)}`}>
+                      <Truck className="h-2.5 w-2.5" />
+                      {truckLabel(stop.truck)}
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-gray-500 truncate">
                   {stop.address}{stop.apartment ? `, ${stop.apartment}` : ''}, {stop.city}, {stop.state} {stop.zip}
@@ -137,8 +146,21 @@ export default function RoutePanel({
                     {stop.items}
                   </p>
                 )}
-                <div className="mt-1">
+                <div className="mt-1 flex items-center gap-2">
                   <StatusBadge status={stop.status} />
+                  {onAssignTruck && (
+                    <select
+                      value={stop.truck || ''}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => onAssignTruck(stop.id, e.target.value)}
+                      className="text-xs border border-gray-200 rounded px-1.5 py-0.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-habitat-green"
+                      title="Assign this stop to a truck"
+                    >
+                      <option value="">No truck</option>
+                      <option value="one">Truck One</option>
+                      <option value="two">Truck Two</option>
+                    </select>
+                  )}
                 </div>
                 {!hasCoords && (
                   <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">

@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { collection, query, where, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore'
+import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { format } from 'date-fns'
 import { Plus, Loader2, Printer, Download, History } from 'lucide-react'
 import { geocodeAddress, isWithinSsmBounds } from '../utils/geocode'
+import { TRUCKS, truckLabel, matchesTruckFilter } from '../utils/trucks'
 import { optimizeRoute, getDepot } from '../utils/routing'
 import MapView from '../components/map/MapView'
 import RoutePanel from '../components/map/RoutePanel'
@@ -21,9 +22,16 @@ export default function MapPage() {
   const [geocodingStatus, setGeocodingStatus] = useState('')
   const [showPrintView, setShowPrintView] = useState(false)
   const [showHistoricalView, setShowHistoricalView] = useState(false)
+  const [truckFilter, setTruckFilter] = useState('all')
   const mapRef = useRef(null)
 
   const depot = getDepot()
+
+  // Stops shown on the map / panel / route for the current truck selection.
+  // Geocoding still runs against the full `bookings` set below.
+  const visibleBookings = truckFilter === 'all'
+    ? bookings
+    : bookings.filter((b) => matchesTruckFilter(b.truck, truckFilter))
 
   // Fetch bookings for selected date
   useEffect(() => {
@@ -102,8 +110,14 @@ export default function MapPage() {
     return () => { cancelled = true }
   }, [bookings])
 
+  // Clear any optimized route when the truck selection changes — the route
+  // only applies to the stops that were selected when it was built.
+  useEffect(() => {
+    setRouteData(null)
+  }, [truckFilter])
+
   const handleOptimize = useCallback(async () => {
-    const geocodedStops = bookings.filter(s => s.lat && s.lng && s.lat !== false)
+    const geocodedStops = visibleBookings.filter(s => s.lat && s.lng && s.lat !== false)
     if (geocodedStops.length < 2) return
 
     setIsOptimizing(true)
@@ -115,7 +129,18 @@ export default function MapPage() {
     } finally {
       setIsOptimizing(false)
     }
-  }, [bookings])
+  }, [visibleBookings])
+
+  const handleAssignTruck = useCallback(async (stopId, value) => {
+    try {
+      await updateDoc(doc(db, 'bookings', stopId), {
+        truck: value || null,
+        updatedAt: serverTimestamp()
+      })
+    } catch (err) {
+      console.error('Error assigning truck:', err)
+    }
+  }, [])
 
   const handleStopClick = useCallback((stop) => {
     // The MapView popup handles this via Leaflet
@@ -150,7 +175,8 @@ export default function MapPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Route Map</h1>
           <p className="text-gray-500">
-            {bookings.length} stop{bookings.length !== 1 ? 's' : ''} for{' '}
+            {visibleBookings.length} stop{visibleBookings.length !== 1 ? 's' : ''}
+            {truckFilter !== 'all' && ` (${truckFilter === 'unassigned' ? 'Unassigned' : truckLabel(truckFilter)})`} for{' '}
             {format(new Date(selectedDate + 'T12:00:00'), 'EEEE, MMMM d, yyyy')}
           </p>
         </div>
@@ -161,6 +187,18 @@ export default function MapPage() {
             onChange={(e) => setSelectedDate(e.target.value)}
             className="input-field w-auto"
           />
+          <select
+            value={truckFilter}
+            onChange={(e) => setTruckFilter(e.target.value)}
+            className="input-field w-auto"
+            title="Build a route for one truck at a time"
+          >
+            <option value="all">All Trucks</option>
+            {TRUCKS.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+            <option value="unassigned">Unassigned</option>
+          </select>
           <button
             onClick={() => setShowHistoricalView(true)}
             className="btn-secondary flex items-center gap-2 whitespace-nowrap"
@@ -202,7 +240,7 @@ export default function MapPage() {
         {/* Map */}
         <div className="card p-0 overflow-hidden h-[60vh] lg:h-auto lg:flex-[2]" ref={mapRef}>
           <MapView
-            stops={routeData ? routeData.orderedStops : bookings}
+            stops={routeData ? routeData.orderedStops : visibleBookings}
             depot={depot}
             routeGeometry={routeData?.geometry}
             onStopClick={handleStopClick}
@@ -212,12 +250,13 @@ export default function MapPage() {
         {/* Route panel */}
         <div className="card p-0 overflow-hidden h-[60vh] lg:h-auto lg:flex-1">
           <RoutePanel
-            stops={bookings}
+            stops={visibleBookings}
             routeData={routeData}
             isOptimizing={isOptimizing}
             onOptimize={handleOptimize}
             onStopClick={handleStopClick}
             onPrint={handlePrint}
+            onAssignTruck={handleAssignTruck}
           />
         </div>
       </div>
@@ -234,9 +273,10 @@ export default function MapPage() {
       {showPrintView && (
         <PrintRouteSheet
           routeData={routeData}
-          stops={bookings}
+          stops={visibleBookings}
           date={selectedDate}
           depot={depot}
+          truckName={truckFilter === 'all' ? 'All Trucks' : truckFilter === 'unassigned' ? 'Unassigned' : truckLabel(truckFilter)}
         />
       )}
 

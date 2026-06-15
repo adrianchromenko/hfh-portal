@@ -11,6 +11,7 @@ import {
 } from '../utils/bookingSettings'
 import { X, Plus, Repeat, AlertTriangle, Briefcase } from 'lucide-react'
 import { format, addWeeks } from 'date-fns'
+import { TRUCKS } from '../utils/trucks'
 
 export default function AddBookingModal({ onClose }) {
   const [submitting, setSubmitting] = useState(false)
@@ -39,6 +40,7 @@ export default function AddBookingModal({ onClose }) {
     notes: '',
     status: 'pending',
     type: 'pickup',
+    truck: '',
     isBusiness: false,
     recurring: false,
     recurringFrequency: 'weekly',
@@ -184,6 +186,21 @@ export default function AddBookingModal({ onClose }) {
                 <option value="cancelled">Cancelled</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Assign Truck (optional)</label>
+            <select
+              name="truck"
+              value={formData.truck}
+              onChange={handleChange}
+              className="input-field"
+            >
+              <option value="">Unassigned</option>
+              {TRUCKS.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
           </div>
 
           <label className="flex items-center gap-3 cursor-pointer p-3 bg-pink-50 rounded-lg border border-pink-200">

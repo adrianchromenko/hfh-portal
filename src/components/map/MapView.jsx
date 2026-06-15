@@ -125,6 +125,14 @@ export default function MapView({ stops, depot, routeGeometry, onStopClick }) {
                 }}>
                   {type === 'delivery' ? 'Delivery' : 'Pickup'}
                 </span>
+                {stop.truck && (
+                  <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={{
+                    background: stop.truck === 'two' ? '#CCFBF1' : '#E0E7FF',
+                    color: stop.truck === 'two' ? '#0F766E' : '#3730A3'
+                  }}>
+                    {stop.truck === 'two' ? 'Truck Two' : 'Truck One'}
+                  </span>
+                )}
                 <br />
                 {stop.address}<br />
                 {stop.city}, {stop.state} {stop.zip}<br />

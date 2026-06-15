@@ -3,6 +3,7 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { geocodeAddress } from '../../utils/geocode'
 import { X, Briefcase } from 'lucide-react'
+import { TRUCKS } from '../../utils/trucks'
 
 export default function AddStopModal({ selectedDate, onClose }) {
   const [type, setType] = useState('pickup')
@@ -18,7 +19,8 @@ export default function AddStopModal({ selectedDate, onClose }) {
     state: 'ON',
     zip: '',
     items: '',
-    notes: ''
+    notes: '',
+    truck: ''
   })
 
   const handleChange = (e) => {
@@ -121,6 +123,17 @@ export default function AddStopModal({ selectedDate, onClose }) {
               <span className="text-sm font-medium text-gray-700">Business pickup</span>
             </div>
           </label>
+
+          {/* Truck */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Assign Truck (optional)</label>
+            <select name="truck" value={formData.truck} onChange={handleChange} className="input-field">
+              <option value="">Unassigned</option>
+              {TRUCKS.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+          </div>
 
           {/* Contact */}
           <div>

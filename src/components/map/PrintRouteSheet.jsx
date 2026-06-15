@@ -1,7 +1,7 @@
 import { format } from 'date-fns'
 import { MapPin, Clock, Phone, Package, Truck } from 'lucide-react'
 
-export default function PrintRouteSheet({ routeData, stops, date, depot }) {
+export default function PrintRouteSheet({ routeData, stops, date, depot, truckName }) {
   const formatTime = (time) => {
     if (!time) return 'Flexible'
     const [hours, minutes] = time.split(':')
@@ -72,6 +72,9 @@ export default function PrintRouteSheet({ routeData, stops, date, depot }) {
             </div>
             <div className="text-right">
               <p className="font-semibold text-lg">{format(new Date(date + 'T12:00:00'), 'EEEE, MMMM d, yyyy')}</p>
+              {truckName && truckName !== 'All Trucks' && (
+                <p className="text-sm font-semibold text-gray-800">{truckName}</p>
+              )}
               <p className="text-sm text-gray-600">Driver: ___________________</p>
             </div>
           </div>

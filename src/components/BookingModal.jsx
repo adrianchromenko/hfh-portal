@@ -23,11 +23,14 @@ import {
   Globe
 } from 'lucide-react'
 import StatusBadge from './StatusBadge'
+import { TRUCKS, truckLabel, truckBadgeClasses } from '../utils/trucks'
 
 export default function BookingModal({ booking, onClose, onUpdateStatus, onDelete, onApprove, onDeny }) {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [remapping, setRemapping] = useState(false)
+  const [truck, setTruck] = useState(booking.truck || '')
+  const [assigningTruck, setAssigningTruck] = useState(false)
   const [editData, setEditData] = useState({
     name: booking.name || '',
     email: booking.email || '',
@@ -40,7 +43,9 @@ export default function BookingModal({ booking, onClose, onUpdateStatus, onDelet
     zip: booking.zip || '',
     items: booking.items || '',
     notes: booking.notes || '',
-    isBusiness: Boolean(booking.isBusiness)
+    isBusiness: Boolean(booking.isBusiness),
+    recurring: Boolean(booking.recurring),
+    recurringFrequency: booking.recurringFrequency || 'weekly'
   })
 
   const handleEditChange = (e) => {
@@ -136,6 +141,24 @@ export default function BookingModal({ booking, onClose, onUpdateStatus, onDelet
     }
   }
 
+  const handleAssignTruck = async (value) => {
+    setAssigningTruck(true)
+    const newVal = value || null
+    try {
+      await updateDoc(doc(db, 'bookings', booking.id), {
+        truck: newVal,
+        updatedAt: serverTimestamp()
+      })
+      booking.truck = newVal
+      setTruck(value)
+    } catch (error) {
+      console.error('Error assigning truck:', error)
+      alert('Could not update the truck assignment. Please try again.')
+    } finally {
+      setAssigningTruck(false)
+    }
+  }
+
   const bookingType = booking.type || 'pickup'
 
   return (
@@ -166,6 +189,12 @@ export default function BookingModal({ booking, onClose, onUpdateStatus, onDelet
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
                       <Repeat className="h-3 w-3" />
                       {booking.recurringFrequency === 'weekly' ? 'Weekly' : booking.recurringFrequency === 'biweekly' ? 'Bi-weekly' : 'Monthly'}
+                    </span>
+                  )}
+                  {booking.truck && (
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${truckBadgeClasses(booking.truck)}`}>
+                      <Truck className="h-3 w-3" />
+                      {truckLabel(booking.truck)}
                     </span>
                   )}
                   {booking.isBusiness && (
@@ -242,6 +271,33 @@ export default function BookingModal({ booking, onClose, onUpdateStatus, onDelet
             </div>
           </div>
 
+          {/* Truck assignment (quick-assign, no edit mode needed) */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Truck
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {[{ value: '', label: 'Unassigned' }, ...TRUCKS].map((opt) => {
+                const active = (truck || '') === opt.value
+                return (
+                  <button
+                    key={opt.value || 'none'}
+                    onClick={() => handleAssignTruck(opt.value)}
+                    disabled={assigningTruck}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                      active
+                        ? 'bg-habitat-green text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {opt.value && <Truck className="h-4 w-4" />}
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
           {/* Business toggle (edit mode only) */}
           {editing && (
             <label className="flex items-center gap-3 cursor-pointer p-3 bg-pink-50 rounded-lg border border-pink-200">
@@ -257,6 +313,45 @@ export default function BookingModal({ booking, onClose, onUpdateStatus, onDelet
                 <span className="text-sm font-medium text-gray-700">Business pickup</span>
               </div>
             </label>
+          )}
+
+          {/* Recurring toggle (edit mode only) — lets staff clear a booking
+              that was marked recurring/weekly by mistake. Only this booking
+              is affected, not any whole series. */}
+          {editing && (
+            <div>
+              <label className="flex items-center gap-3 cursor-pointer p-3 bg-purple-50 rounded-lg border border-purple-200">
+                <input
+                  type="checkbox"
+                  name="recurring"
+                  checked={editData.recurring}
+                  onChange={handleEditChange}
+                  className="h-5 w-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                />
+                <div className="flex items-center gap-2">
+                  <Repeat className="h-4 w-4 text-purple-600" />
+                  <span className="text-sm font-medium text-gray-700">Recurring pickup</span>
+                </div>
+              </label>
+              {editData.recurring && (
+                <div className="mt-3">
+                  <label className="block text-xs text-gray-500 mb-1">Frequency</label>
+                  <select
+                    name="recurringFrequency"
+                    value={editData.recurringFrequency}
+                    onChange={handleEditChange}
+                    className="input-field"
+                  >
+                    <option value="weekly">Weekly</option>
+                    <option value="biweekly">Every 2 Weeks</option>
+                    <option value="monthly">Monthly (every 4 weeks)</option>
+                  </select>
+                </div>
+              )}
+              <p className="mt-2 text-xs text-gray-400">
+                Uncheck this if the booking was marked recurring by mistake.
+              </p>
+            </div>
           )}
 
           {/* Contact Info */}
