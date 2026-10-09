@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import StatusBadge from '../components/StatusBadge'
 import { TRUCKS, truckLabel, truckBadgeClasses, matchesTruckFilter } from '../utils/trucks'
+import { recurringBadgeLabel } from '../utils/customerBookings'
 import CalendarView from '../components/CalendarView'
 import AddBookingModal from '../components/AddBookingModal'
 import BookingModal from '../components/BookingModal'
@@ -538,7 +539,7 @@ export default function Bookings() {
                               {booking.recurring && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
                                   <Repeat className="h-3 w-3" />
-                                  {booking.recurringFrequency === 'weekly' ? 'Weekly' : booking.recurringFrequency === 'biweekly' ? 'Bi-weekly' : 'Monthly'}
+                                  {recurringBadgeLabel(booking)}
                                 </span>
                               )}
                               {booking.truck && (

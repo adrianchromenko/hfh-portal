@@ -53,9 +53,72 @@ function normalizeNumber(n) {
   return (n || '').toString().replace(/[^0-9]/g, '')
 }
 
-export async function geocodeAddress(address, city, state, zip) {
-  const houseNumber = extractHouseNumber(address)
-  const street = address?.trim() || ''
+// Words that can follow "St" when it means "Street" rather than "Saint".
+// "Queen St E" must stay as-is; "St Georges Ave" should become "Saint ...".
+const NOT_A_SAINT_NAME = new Set([
+  'e', 'w', 'n', 's', 'east', 'west', 'north', 'south',
+  'ne', 'nw', 'se', 'sw', 'unit', 'apt', 'suite', 'ste'
+])
+
+// OpenStreetMap spells saints' streets in full with a possessive, e.g.
+// "Saint George's Avenue East", and Nominatim won't match "St. Georges Ave"
+// against it. This returns the spellings worth trying, most likely first:
+//   "100 St. Georges Ave" → ["100 St. Georges Ave",
+//                            "100 St. George's Ave",
+//                            "100 Saint George's Ave",
+//                            "100 Saint Georges Ave"]
+// Addresses without a St/Saint prefix get a single-element list, so the
+// common case costs no extra requests.
+export function streetSpellingVariants(address) {
+  const original = (address || '').trim()
+  const words = original.split(/\s+/)
+
+  let saintIndex = -1
+  for (let i = 0; i < words.length - 1; i++) {
+    const w = words[i].toLowerCase().replace(/\.$/, '')
+    const next = words[i + 1].toLowerCase().replace(/[^a-z']/g, '')
+    if ((w === 'st' || w === 'saint') && next.length >= 3 && !NOT_A_SAINT_NAME.has(next)) {
+      saintIndex = i
+      break
+    }
+  }
+  if (saintIndex === -1) return [original]
+
+  const withPrefix = (prefix, list) =>
+    list.map((w, i) => (i === saintIndex ? prefix : w))
+
+  const nameIndex = saintIndex + 1
+  const name = words[nameIndex]
+  const canAddApostrophe = /s$/i.test(name) && !name.includes("'")
+  const withApostrophe = (list) =>
+    list.map((w, i) => (i === nameIndex ? w.replace(/s$/i, "'s") : w))
+
+  const candidates = [
+    words,
+    canAddApostrophe ? withApostrophe(words) : null,
+    canAddApostrophe ? withPrefix('Saint', withApostrophe(words)) : null,
+    withPrefix('Saint', words),
+    withPrefix('St.', words)
+  ]
+
+  const seen = new Set()
+  const variants = []
+  for (const c of candidates) {
+    if (!c) continue
+    const text = c.join(' ')
+    const key = text.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    variants.push(text)
+  }
+  return variants
+}
+
+// Runs the full lookup for one spelling of the street. Returns
+// { lat, lng, exact } where exact means Nominatim returned the same house
+// number we asked for, or null when nothing was found.
+async function geocodeSpelling(street, city, state, zip) {
+  const houseNumber = extractHouseNumber(street)
 
   // 1) Postal-code-first query — a full 6-char Canadian postal code pins
   // a small block, so "street + postalcode" often resolves more precisely
@@ -82,7 +145,7 @@ export async function geocodeAddress(address, city, state, zip) {
       const target = normalizeNumber(houseNumber)
       const exact = results.find(r => normalizeNumber(r.address?.house_number) === target)
       if (exact) {
-        return { lat: parseFloat(exact.lat), lng: parseFloat(exact.lon) }
+        return { lat: parseFloat(exact.lat), lng: parseFloat(exact.lon), exact: true }
       }
     }
   }
@@ -113,7 +176,7 @@ export async function geocodeAddress(address, city, state, zip) {
     const target = normalizeNumber(houseNumber)
     const exact = results.find(r => normalizeNumber(r.address?.house_number) === target)
     if (exact) {
-      return { lat: parseFloat(exact.lat), lng: parseFloat(exact.lon) }
+      return { lat: parseFloat(exact.lat), lng: parseFloat(exact.lon), exact: true }
     }
   }
 
@@ -122,12 +185,12 @@ export async function geocodeAddress(address, city, state, zip) {
   // business name). Otherwise fall through to the free-form retry, which
   // sometimes finds a better match.
   if (!houseNumber && results.length) {
-    return { lat: parseFloat(results[0].lat), lng: parseFloat(results[0].lon) }
+    return { lat: parseFloat(results[0].lat), lng: parseFloat(results[0].lon), exact: true }
   }
 
   // 3) Free-form fallback with addressdetails, still filtered by country.
   const freeform = applySsmBounds(new URLSearchParams({
-    q: `${address}, ${city}, ${state}${zip ? ' ' + zip : ''}, Canada`,
+    q: `${street}, ${city}, ${state}${zip ? ' ' + zip : ''}, Canada`,
     format: 'json',
     addressdetails: '1',
     limit: '5',
@@ -145,17 +208,33 @@ export async function geocodeAddress(address, city, state, zip) {
     const target = normalizeNumber(houseNumber)
     const exact = fallback.find(r => normalizeNumber(r.address?.house_number) === target)
     if (exact) {
-      return { lat: parseFloat(exact.lat), lng: parseFloat(exact.lon) }
+      return { lat: parseFloat(exact.lat), lng: parseFloat(exact.lon), exact: true }
     }
   }
 
   if (fallback.length) {
-    return { lat: parseFloat(fallback[0].lat), lng: parseFloat(fallback[0].lon) }
+    return { lat: parseFloat(fallback[0].lat), lng: parseFloat(fallback[0].lon), exact: false }
   }
 
   if (results.length) {
-    return { lat: parseFloat(results[0].lat), lng: parseFloat(results[0].lon) }
+    return { lat: parseFloat(results[0].lat), lng: parseFloat(results[0].lon), exact: false }
   }
 
   return null
+}
+
+export async function geocodeAddress(address, city, state, zip) {
+  const variants = streetSpellingVariants(address)
+  let bestInexact = null
+
+  for (const street of variants) {
+    const result = await geocodeSpelling(street, city, state, zip)
+    if (!result) continue
+    if (result.exact) {
+      return { lat: result.lat, lng: result.lng }
+    }
+    if (!bestInexact) bestInexact = result
+  }
+
+  return bestInexact ? { lat: bestInexact.lat, lng: bestInexact.lng } : null
 }

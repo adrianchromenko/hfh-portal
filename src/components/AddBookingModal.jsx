@@ -1,5 +1,12 @@
-import { useEffect, useState } from 'react'
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  collection,
+  addDoc,
+  getDocs,
+  orderBy,
+  query,
+  serverTimestamp
+} from 'firebase/firestore'
 import { db } from '../firebase'
 import { geocodeAddress } from '../utils/geocode'
 import {
@@ -9,23 +16,29 @@ import {
   getMaxForDate,
   DEFAULT_BOOKING_SETTINGS
 } from '../utils/bookingSettings'
-import { X, Plus, Repeat, AlertTriangle, Briefcase } from 'lucide-react'
+import {
+  computeScheduleDates,
+  FREQUENCY_OPTIONS,
+  WEEK_OF_MONTH_OPTIONS
+} from '../utils/customerBookings'
+import {
+  X,
+  Plus,
+  Repeat,
+  AlertTriangle,
+  Briefcase,
+  Search,
+  Contact,
+  Check,
+  MapPin
+} from 'lucide-react'
 import { format, addWeeks } from 'date-fns'
 import { TRUCKS } from '../utils/trucks'
 
-export default function AddBookingModal({ onClose }) {
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState('')
-  const [capacityWarning, setCapacityWarning] = useState('')
-  const [overrideCapacity, setOverrideCapacity] = useState(false)
-  const [bookingSettings, setBookingSettings] = useState(DEFAULT_BOOKING_SETTINGS)
+const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
-  useEffect(() => {
-    const unsub = subscribeBookingSettings(setBookingSettings)
-    return () => unsub()
-  }, [])
-
-  const [formData, setFormData] = useState({
+function emptyForm(initialDate) {
+  return {
     name: '',
     email: '',
     phone: '',
@@ -34,7 +47,7 @@ export default function AddBookingModal({ onClose }) {
     city: 'Sault Ste. Marie',
     state: 'ON',
     zip: '',
-    date: format(new Date(), 'yyyy-MM-dd'),
+    date: initialDate || format(new Date(), 'yyyy-MM-dd'),
     time: '',
     items: '',
     notes: '',
@@ -44,8 +57,99 @@ export default function AddBookingModal({ onClose }) {
     isBusiness: false,
     recurring: false,
     recurringFrequency: 'weekly',
+    recurringWeekOfMonth: '1',
     recurringWeeks: '8'
+  }
+}
+
+// Copies a saved customer's details into the booking form.
+function formFromCustomer(customer, prev) {
+  return {
+    ...prev,
+    name: customer.name || '',
+    email: customer.email || '',
+    phone: customer.phone || '',
+    address: customer.address || '',
+    apartment: customer.apartment || '',
+    city: customer.city || 'Sault Ste. Marie',
+    state: customer.state || 'ON',
+    zip: customer.zip || '',
+    items: prev.items || customer.schedule?.defaultItems || '',
+    notes: prev.notes || customer.notes || '',
+    type: customer.schedule?.type || prev.type || 'pickup',
+    isBusiness: Boolean(customer.isBusiness)
+  }
+}
+
+function sameAddress(a, b) {
+  const norm = (v) => String(v || '').trim().toLowerCase()
+  return (
+    norm(a.address) === norm(b.address) &&
+    norm(a.city) === norm(b.city) &&
+    norm(a.state) === norm(b.state) &&
+    norm(a.zip) === norm(b.zip)
+  )
+}
+
+export default function AddBookingModal({ onClose, initialCustomer = null, initialDate = null }) {
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [capacityWarning, setCapacityWarning] = useState('')
+  const [overrideCapacity, setOverrideCapacity] = useState(false)
+  const [bookingSettings, setBookingSettings] = useState(DEFAULT_BOOKING_SETTINGS)
+
+  // Saved-customer picker
+  const [customers, setCustomers] = useState([])
+  const [customersLoading, setCustomersLoading] = useState(true)
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [showCustomerResults, setShowCustomerResults] = useState(false)
+  const [selectedCustomer, setSelectedCustomer] = useState(initialCustomer)
+  const [saveAsCustomer, setSaveAsCustomer] = useState(false)
+
+  useEffect(() => {
+    const unsub = subscribeBookingSettings(setBookingSettings)
+    return () => unsub()
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const snap = await getDocs(query(collection(db, 'customers'), orderBy('name', 'asc')))
+        if (cancelled) return
+        const rows = []
+        snap.forEach((d) => rows.push({ id: d.id, ...d.data() }))
+        setCustomers(rows)
+      } catch (err) {
+        console.warn('Failed to load saved customers:', err)
+      } finally {
+        if (!cancelled) setCustomersLoading(false)
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const [formData, setFormData] = useState(() => {
+    const base = emptyForm(initialDate)
+    return initialCustomer ? formFromCustomer(initialCustomer, base) : base
   })
+
+  const customerMatches = useMemo(() => {
+    const t = customerSearch.trim().toLowerCase()
+    if (!t) return customers.slice(0, 8)
+    return customers
+      .filter(
+        (c) =>
+          c.name?.toLowerCase().includes(t) ||
+          c.phone?.toLowerCase().includes(t) ||
+          c.email?.toLowerCase().includes(t) ||
+          c.address?.toLowerCase().includes(t)
+      )
+      .slice(0, 8)
+  }, [customers, customerSearch])
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -54,6 +158,18 @@ export default function AddBookingModal({ onClose }) {
       setCapacityWarning('')
       setOverrideCapacity(false)
     }
+  }
+
+  const pickCustomer = (customer) => {
+    setSelectedCustomer(customer)
+    setFormData((prev) => formFromCustomer(customer, prev))
+    setCustomerSearch('')
+    setShowCustomerResults(false)
+    setSaveAsCustomer(false)
+  }
+
+  const clearCustomer = () => {
+    setSelectedCustomer(null)
   }
 
   const handleSubmit = async (e) => {
@@ -90,30 +206,86 @@ export default function AddBookingModal({ onClose }) {
     setSubmitting(true)
 
     try {
-      // Geocode address
+      // Reuse the saved customer's pin when the address hasn't changed,
+      // otherwise geocode the address.
       let coords = null
-      try {
-        coords = await geocodeAddress(formData.address, formData.city, formData.state, formData.zip)
-      } catch (geoErr) {
-        console.warn('Geocoding failed:', geoErr)
+      if (
+        selectedCustomer &&
+        selectedCustomer.lat != null &&
+        selectedCustomer.lng != null &&
+        sameAddress(selectedCustomer, formData)
+      ) {
+        coords = { lat: selectedCustomer.lat, lng: selectedCustomer.lng }
+      } else {
+        try {
+          coords = await geocodeAddress(formData.address, formData.city, formData.state, formData.zip)
+        } catch (geoErr) {
+          console.warn('Geocoding failed:', geoErr)
+        }
       }
 
       // Build base booking data (exclude UI-only fields)
-      const { recurring, recurringFrequency, recurringWeeks, ...bookingFields } = formData
+      const {
+        recurring,
+        recurringFrequency,
+        recurringWeekOfMonth,
+        recurringWeeks,
+        ...bookingFields
+      } = formData
       const recurringId = recurring ? `recurring_${Date.now()}` : null
-      const frequencyWeeks = recurringFrequency === 'weekly' ? 1 : recurringFrequency === 'biweekly' ? 2 : 4
+      const firstDate = new Date(formData.date + 'T12:00:00')
+      const dayOfWeek = firstDate.getDay()
+
+      let customerId = selectedCustomer?.id || null
+
+      // Optionally save a brand-new customer so they can be booked again
+      // later without re-typing everything.
+      if (!customerId && saveAsCustomer) {
+        const customerRef = await addDoc(collection(db, 'customers'), {
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          phone: formData.phone.trim(),
+          address: formData.address.trim(),
+          apartment: formData.apartment.trim(),
+          city: formData.city.trim(),
+          state: formData.state.trim(),
+          zip: formData.zip.trim(),
+          notes: formData.notes.trim(),
+          isBusiness: Boolean(formData.isBusiness),
+          lat: coords?.lat ?? null,
+          lng: coords?.lng ?? null,
+          schedule: {
+            active: false,
+            frequency: 'weekly',
+            dayOfWeek,
+            weekOfMonth: 1,
+            type: formData.type,
+            defaultItems: formData.items.trim(),
+            startDate: formData.date
+          },
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        })
+        customerId = customerRef.id
+      }
 
       const baseData = {
         ...bookingFields,
-        lat: coords?.lat || null,
-        lng: coords?.lng || null,
+        lat: coords?.lat ?? null,
+        lng: coords?.lng ?? null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         manualEntry: true,
+        ...(customerId && {
+          customerId,
+          customerName: formData.name.trim()
+        }),
         ...(recurring && {
           recurring: true,
           recurringId,
-          recurringFrequency
+          recurringFrequency,
+          recurringDayOfWeek: dayOfWeek,
+          recurringWeekOfMonth: Number(recurringWeekOfMonth) || 1
         })
       }
 
@@ -123,12 +295,22 @@ export default function AddBookingModal({ onClose }) {
       // Create future recurring bookings
       if (recurring) {
         const totalWeeks = parseInt(recurringWeeks) || 8
-        const totalOccurrences = Math.floor(totalWeeks / frequencyWeeks)
-        for (let i = 1; i < totalOccurrences; i++) {
-          const futureDate = addWeeks(new Date(formData.date + 'T12:00:00'), i * frequencyWeeks)
+        const through = addWeeks(firstDate, totalWeeks)
+        const dates = computeScheduleDates(
+          {
+            startDate: formData.date,
+            dayOfWeek,
+            frequency: recurringFrequency,
+            weekOfMonth: Number(recurringWeekOfMonth) || 1
+          },
+          firstDate,
+          through
+        ).filter((d) => d !== formData.date)
+
+        for (const dateStr of dates) {
           await addDoc(collection(db, 'bookings'), {
             ...baseData,
-            date: format(futureDate, 'yyyy-MM-dd'),
+            date: dateStr,
             status: 'confirmed'
           })
         }
@@ -142,6 +324,11 @@ export default function AddBookingModal({ onClose }) {
       setSubmitting(false)
     }
   }
+
+  const bookingDayLabel = (() => {
+    const d = new Date(formData.date + 'T12:00:00')
+    return isNaN(d.getTime()) ? 'day' : DAY_LABELS[d.getDay()]
+  })()
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4" style={{ zIndex: 9999 }}>
@@ -158,6 +345,95 @@ export default function AddBookingModal({ onClose }) {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          {/* Saved customer picker */}
+          <div className="p-4 bg-habitat-green/5 rounded-lg border border-habitat-green/30">
+            <div className="flex items-center gap-2 mb-2">
+              <Contact className="h-4 w-4 text-habitat-green" />
+              <h3 className="text-sm font-semibold text-gray-700">Saved Customer</h3>
+            </div>
+
+            {selectedCustomer ? (
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-medium text-gray-900 flex items-center gap-2">
+                    <Check className="h-4 w-4 text-habitat-green" />
+                    {selectedCustomer.name}
+                  </p>
+                  <p className="text-xs text-gray-500 truncate flex items-center gap-1 mt-0.5">
+                    <MapPin className="h-3 w-3" />
+                    {selectedCustomer.address}
+                    {selectedCustomer.city ? `, ${selectedCustomer.city}` : ''}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Details filled in below. Edit anything for this booking only.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={clearCustomer}
+                  className="text-xs text-gray-500 hover:text-gray-800 underline shrink-0"
+                >
+                  Use a different customer
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={customerSearch}
+                  onChange={(e) => {
+                    setCustomerSearch(e.target.value)
+                    setShowCustomerResults(true)
+                  }}
+                  onFocus={() => setShowCustomerResults(true)}
+                  onBlur={() => setTimeout(() => setShowCustomerResults(false), 150)}
+                  className="input-field pl-10"
+                  placeholder={
+                    customersLoading
+                      ? 'Loading saved customers...'
+                      : customers.length === 0
+                      ? 'No saved customers yet — fill in the form below'
+                      : 'Search saved customers or businesses by name, phone, or address...'
+                  }
+                  disabled={customersLoading || customers.length === 0}
+                />
+                {showCustomerResults && customers.length > 0 && (
+                  <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                    {customerMatches.length === 0 ? (
+                      <p className="px-3 py-2 text-sm text-gray-500">No matching customers.</p>
+                    ) : (
+                      customerMatches.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => pickCustomer(c)}
+                          className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                        >
+                          <p className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                            {c.name}
+                            {c.isBusiness && (
+                              <Briefcase className="h-3 w-3 text-pink-600" />
+                            )}
+                          </p>
+                          <p className="text-xs text-gray-500 truncate">
+                            {c.address}
+                            {c.city ? `, ${c.city}` : ''}
+                            {c.phone ? ` · ${c.phone}` : ''}
+                          </p>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+                <p className="mt-2 text-xs text-gray-500">
+                  Pick a saved customer to fill in their details, or type a new one below.
+                </p>
+              </div>
+            )}
+          </div>
+
           {/* Type and Status Row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -231,7 +507,7 @@ export default function AddBookingModal({ onClose }) {
                   value={formData.name}
                   onChange={handleChange}
                   className="input-field"
-                  placeholder="Customer name"
+                  placeholder="Customer or business name"
                 />
               </div>
 
@@ -261,6 +537,23 @@ export default function AddBookingModal({ onClose }) {
                   />
                 </div>
               </div>
+
+              {!selectedCustomer && (
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={saveAsCustomer}
+                    onChange={(e) => setSaveAsCustomer(e.target.checked)}
+                    className="h-5 w-5 rounded border-gray-300 text-habitat-green focus:ring-habitat-green"
+                  />
+                  <span className="text-sm text-gray-700">
+                    <span className="font-medium">Save this customer for next time</span>
+                    <span className="block text-xs text-gray-500">
+                      Adds them to the Customers page so you can book them with one click.
+                    </span>
+                  </span>
+                </label>
+              )}
             </div>
           </div>
 
@@ -319,40 +612,66 @@ export default function AddBookingModal({ onClose }) {
                 />
                 <div className="flex items-center gap-2">
                   <Repeat className="h-4 w-4 text-purple-600" />
-                  <span className="text-sm font-medium text-gray-700">This is a recurring pickup (e.g. business)</span>
+                  <span className="text-sm font-medium text-gray-700">Repeat this booking (e.g. business)</span>
                 </div>
               </label>
 
               {formData.recurring && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
-                  <div>
-                    <label className="block text-sm font-medium text-purple-800 mb-1">Frequency</label>
-                    <select
-                      name="recurringFrequency"
-                      value={formData.recurringFrequency}
-                      onChange={handleChange}
-                      className="input-field"
-                    >
-                      <option value="weekly">Weekly</option>
-                      <option value="biweekly">Every 2 Weeks</option>
-                      <option value="monthly">Monthly (every 4 weeks)</option>
-                    </select>
+                <div className="p-4 bg-purple-50 rounded-lg border border-purple-200 space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-purple-800 mb-1">Frequency</label>
+                      <select
+                        name="recurringFrequency"
+                        value={formData.recurringFrequency}
+                        onChange={handleChange}
+                        className="input-field"
+                      >
+                        {FREQUENCY_OPTIONS.map((f) => (
+                          <option key={f.value} value={f.value}>{f.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-purple-800 mb-1">Generate for how long?</label>
+                      <select
+                        name="recurringWeeks"
+                        value={formData.recurringWeeks}
+                        onChange={handleChange}
+                        className="input-field"
+                      >
+                        <option value="4">4 weeks</option>
+                        <option value="8">8 weeks</option>
+                        <option value="12">12 weeks</option>
+                        <option value="26">26 weeks (6 months)</option>
+                        <option value="52">52 weeks (1 year)</option>
+                      </select>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-purple-800 mb-1">Generate for how many weeks?</label>
-                    <select
-                      name="recurringWeeks"
-                      value={formData.recurringWeeks}
-                      onChange={handleChange}
-                      className="input-field"
-                    >
-                      <option value="4">4 weeks</option>
-                      <option value="8">8 weeks</option>
-                      <option value="12">12 weeks</option>
-                      <option value="26">26 weeks (6 months)</option>
-                      <option value="52">52 weeks (1 year)</option>
-                    </select>
-                  </div>
+
+                  {formData.recurringFrequency === 'nth-weekday' && (
+                    <div>
+                      <label className="block text-sm font-medium text-purple-800 mb-1">
+                        Which {bookingDayLabel} of the month?
+                      </label>
+                      <select
+                        name="recurringWeekOfMonth"
+                        value={formData.recurringWeekOfMonth}
+                        onChange={handleChange}
+                        className="input-field"
+                      >
+                        {WEEK_OF_MONTH_OPTIONS.map((w) => (
+                          <option key={w.value} value={w.value}>{w.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-purple-700">
+                    Repeats on {bookingDayLabel}s starting from the date above.
+                    For a schedule that runs indefinitely, save the customer and set up a recurring
+                    schedule on the Customers page instead.
+                  </p>
                 </div>
               )}
             </div>

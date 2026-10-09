@@ -12,8 +12,12 @@ import {
   subscribeBookingSettings,
   DEFAULT_BOOKING_SETTINGS
 } from '../utils/bookingSettings'
-import { regenerateFutureBookings } from '../utils/customerBookings'
-import { X, Save, Repeat } from 'lucide-react'
+import {
+  regenerateFutureBookings,
+  FREQUENCY_OPTIONS,
+  WEEK_OF_MONTH_OPTIONS
+} from '../utils/customerBookings'
+import { X, Save, Repeat, Briefcase } from 'lucide-react'
 import { format } from 'date-fns'
 
 const DAYS = [
@@ -47,9 +51,13 @@ export default function CustomerModal({ customer, onClose }) {
     state: customer?.state || 'ON',
     zip: customer?.zip || '',
     notes: customer?.notes || '',
-    scheduleActive: customer?.schedule?.active ?? true,
+    isBusiness: customer?.isBusiness ?? false,
+    // New customers default to "saved for quick booking" with no recurring
+    // schedule — staff opt in to recurring by ticking the box.
+    scheduleActive: customer?.schedule?.active ?? false,
     frequency: customer?.schedule?.frequency || 'weekly',
     dayOfWeek: customer?.schedule?.dayOfWeek ?? 1,
+    weekOfMonth: customer?.schedule?.weekOfMonth ?? 1,
     type: customer?.schedule?.type || 'pickup',
     defaultItems: customer?.schedule?.defaultItems || '',
     startDate: customer?.schedule?.startDate || format(new Date(), 'yyyy-MM-dd')
@@ -91,7 +99,7 @@ export default function CustomerModal({ customer, onClose }) {
         customer?.state !== formData.state ||
         customer?.zip !== formData.zip
 
-      if (addressChanged) {
+      if (addressChanged || coords.lat == null) {
         try {
           const result = await geocodeAddress(
             formData.address,
@@ -115,12 +123,14 @@ export default function CustomerModal({ customer, onClose }) {
         state: formData.state.trim(),
         zip: formData.zip.trim(),
         notes: formData.notes.trim(),
+        isBusiness: Boolean(formData.isBusiness),
         lat: coords.lat,
         lng: coords.lng,
         schedule: {
           active: formData.scheduleActive,
           frequency: formData.frequency,
           dayOfWeek: Number(formData.dayOfWeek),
+          weekOfMonth: Number(formData.weekOfMonth),
           type: formData.type,
           defaultItems: formData.defaultItems.trim(),
           startDate: formData.startDate
@@ -163,7 +173,8 @@ export default function CustomerModal({ customer, onClose }) {
               {isEdit ? 'Edit Customer' : 'Add Customer'}
             </h2>
             <p className="text-sm text-gray-500">
-              Recurring pickups or deliveries will be generated automatically.
+              Saved customers can be booked in one click. Add a recurring schedule if they
+              have a regular pickup or delivery.
             </p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
@@ -215,6 +226,22 @@ export default function CustomerModal({ customer, onClose }) {
                   />
                 </div>
               </div>
+
+              <label className="flex items-center gap-3 cursor-pointer p-3 bg-pink-50 rounded-lg border border-pink-200">
+                <input
+                  type="checkbox"
+                  name="isBusiness"
+                  checked={formData.isBusiness}
+                  onChange={handleChange}
+                  className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+                />
+                <div className="flex items-center gap-2">
+                  <Briefcase className="h-4 w-4 text-pink-600" />
+                  <span className="text-sm font-medium text-gray-700">
+                    This is a business (bookings show in a distinct color on the map)
+                  </span>
+                </div>
+              </label>
             </div>
           </div>
 
@@ -292,19 +319,23 @@ export default function CustomerModal({ customer, onClose }) {
           <div>
             <div className="flex items-center gap-2 mb-3">
               <Repeat className="h-4 w-4 text-purple-600" />
-              <h3 className="text-sm font-semibold text-gray-700">Recurring Schedule</h3>
+              <h3 className="text-sm font-semibold text-gray-700">Recurring Schedule (optional)</h3>
             </div>
 
-            <label className="flex items-center gap-3 cursor-pointer mb-4">
+            <label className="flex items-start gap-3 cursor-pointer mb-4">
               <input
                 type="checkbox"
                 name="scheduleActive"
                 checked={formData.scheduleActive}
                 onChange={handleChange}
-                className="h-5 w-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                className="mt-0.5 h-5 w-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
               />
-              <span className="text-sm font-medium text-gray-700">
-                Schedule is active (bookings will be generated indefinitely)
+              <span className="text-sm text-gray-700">
+                <span className="font-medium">Set up a recurring pickup or delivery</span>
+                <span className="block text-xs text-gray-500 mt-0.5">
+                  Leave this off for customers you book as needed (e.g. the dump). You can still
+                  schedule them any time from the Customers page.
+                </span>
               </span>
             </label>
 
@@ -321,9 +352,11 @@ export default function CustomerModal({ customer, onClose }) {
                       onChange={handleChange}
                       className="input-field"
                     >
-                      <option value="weekly">Weekly</option>
-                      <option value="biweekly">Every 2 Weeks</option>
-                      <option value="monthly">Monthly (every 4 weeks)</option>
+                      {FREQUENCY_OPTIONS.map((f) => (
+                        <option key={f.value} value={f.value}>
+                          {f.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div>
@@ -344,6 +377,29 @@ export default function CustomerModal({ customer, onClose }) {
                     </select>
                   </div>
                 </div>
+
+                {formData.frequency === 'nth-weekday' && (
+                  <div>
+                    <label className="block text-sm font-medium text-purple-800 mb-1">
+                      Which {DAYS.find((d) => d.value === Number(formData.dayOfWeek))?.label || 'day'} of the month?
+                    </label>
+                    <select
+                      name="weekOfMonth"
+                      value={formData.weekOfMonth}
+                      onChange={handleChange}
+                      className="input-field"
+                    >
+                      {WEEK_OF_MONTH_OPTIONS.map((w) => (
+                        <option key={w.value} value={w.value}>
+                          {w.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-xs text-purple-700">
+                      Example: &quot;First Thursday of every month&quot;.
+                    </p>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -388,7 +444,7 @@ export default function CustomerModal({ customer, onClose }) {
 
                 <p className="text-xs text-purple-700">
                   Bookings will be generated for 52 weeks ahead and auto-extended as needed.
-                  Blocked dates in Settings will be skipped.
+                  Staff schedules ignore the public blocked days and dates in Settings.
                 </p>
               </div>
             )}

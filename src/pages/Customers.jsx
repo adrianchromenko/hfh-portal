@@ -18,9 +18,12 @@ import {
   Edit2,
   Trash2,
   RefreshCw,
+  CalendarPlus,
+  Briefcase,
   Users as UsersIcon
 } from 'lucide-react'
 import CustomerModal from '../components/CustomerModal'
+import AddBookingModal from '../components/AddBookingModal'
 import {
   subscribeBookingSettings,
   DEFAULT_BOOKING_SETTINGS
@@ -39,6 +42,7 @@ export default function Customers() {
   const [searchTerm, setSearchTerm] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState(null)
+  const [bookingCustomer, setBookingCustomer] = useState(null)
   const [bookingSettings, setBookingSettings] = useState(DEFAULT_BOOKING_SETTINGS)
   const [extendingId, setExtendingId] = useState(null)
   const topUpRan = useRef(false)
@@ -96,7 +100,7 @@ export default function Customers() {
 
   const handleDelete = async (customer) => {
     const ok = window.confirm(
-      `Delete customer "${customer.name}"?\n\nThis will also delete all of their future recurring bookings. Past bookings will be kept for history.`
+      `Delete customer "${customer.name}"?\n\nThis will also delete all of their future recurring bookings. Past bookings and one-off bookings will be kept for history.`
     )
     if (!ok) return
     try {
@@ -138,7 +142,7 @@ export default function Customers() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Customers</h1>
           <p className="text-gray-500">
-            Manage recurring pickup and delivery customers
+            Saved customers and businesses. Book them in one click, or set up a recurring schedule.
           </p>
         </div>
         <button onClick={handleAdd} className="btn-primary flex items-center gap-2">
@@ -173,7 +177,7 @@ export default function Customers() {
             </p>
             <p className="text-sm text-gray-400">
               {customers.length === 0
-                ? 'Add your first recurring customer to get started.'
+                ? 'Save a customer or business here to book them quickly next time.'
                 : 'Try a different search term.'}
             </p>
           </div>
@@ -186,16 +190,25 @@ export default function Customers() {
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
                       <h3 className="font-semibold text-gray-900">{customer.name}</h3>
+                      {customer.isBusiness && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-pink-100 text-pink-700">
+                          <Briefcase className="h-3 w-3" />
+                          Business
+                        </span>
+                      )}
                       {customer.schedule?.active ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
                           <Repeat className="h-3 w-3" />
                           {scheduleSummary(customer.schedule)}
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                          Paused
+                        <span
+                          className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600"
+                          title="No recurring schedule. Use the Book button to schedule a pickup or delivery whenever needed."
+                        >
+                          Book as needed
                         </span>
                       )}
                     </div>
@@ -231,6 +244,14 @@ export default function Customers() {
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => setBookingCustomer(customer)}
+                      className="btn-primary flex items-center gap-1.5 px-3 py-1.5 text-sm"
+                      title="Schedule a pickup or delivery for this customer"
+                    >
+                      <CalendarPlus className="h-4 w-4" />
+                      Book
+                    </button>
                     {customer.schedule?.active && (
                       <button
                         onClick={() => handleExtend(customer)}
@@ -274,6 +295,13 @@ export default function Customers() {
             setShowModal(false)
             setEditingCustomer(null)
           }}
+        />
+      )}
+
+      {bookingCustomer && (
+        <AddBookingModal
+          initialCustomer={bookingCustomer}
+          onClose={() => setBookingCustomer(null)}
         />
       )}
     </div>

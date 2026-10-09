@@ -8,12 +8,39 @@ import {
   writeBatch
 } from 'firebase/firestore'
 import { db } from '../firebase'
-import { addDays, addWeeks, format, startOfDay } from 'date-fns'
+import {
+  addDays,
+  addMonths,
+  addWeeks,
+  format,
+  startOfDay,
+  startOfMonth,
+  endOfMonth
+} from 'date-fns'
 
 export const DEFAULT_HORIZON_WEEKS = 52
 export const TOPUP_THRESHOLD_WEEKS = 26
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+const SHORT_DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+// Frequency options shared by the customer schedule form and the manual
+// booking form. 'nth-weekday' means "the Nth <weekday> of every month"
+// (e.g. first Thursday) and requires schedule.weekOfMonth (1-4, or -1 = last).
+export const FREQUENCY_OPTIONS = [
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'biweekly', label: 'Every 2 weeks' },
+  { value: 'monthly', label: 'Every 4 weeks' },
+  { value: 'nth-weekday', label: 'Monthly on a specific weekday (e.g. first Thursday)' }
+]
+
+export const WEEK_OF_MONTH_OPTIONS = [
+  { value: 1, label: 'First' },
+  { value: 2, label: 'Second' },
+  { value: 3, label: 'Third' },
+  { value: 4, label: 'Fourth' },
+  { value: -1, label: 'Last' }
+]
 
 function stepDays(frequency) {
   if (frequency === 'weekly') return 7
@@ -21,22 +48,57 @@ function stepDays(frequency) {
   return 28 // monthly (every 4 weeks)
 }
 
-function computeScheduleDates(schedule, fromDate, throughDate) {
+// Returns the date of the Nth <weekday> in the month containing `monthDate`,
+// or null if that month has no such day (e.g. a 5th Thursday).
+function nthWeekdayOfMonth(monthDate, dayOfWeek, weekOfMonth) {
+  if (weekOfMonth === -1) {
+    const last = endOfMonth(monthDate)
+    const back = (last.getDay() - dayOfWeek + 7) % 7
+    const d = addDays(last, -back)
+    d.setHours(12, 0, 0, 0)
+    return d
+  }
+  const first = startOfMonth(monthDate)
+  const forward = (dayOfWeek - first.getDay() + 7) % 7
+  const d = addDays(first, forward + (weekOfMonth - 1) * 7)
+  d.setHours(12, 0, 0, 0)
+  if (d.getMonth() !== monthDate.getMonth()) return null
+  return d
+}
+
+// Computes every occurrence of a recurring schedule between fromDate and
+// throughDate (inclusive) as 'yyyy-MM-dd' strings.
+//
+// Customer recurring schedules are set up internally by staff and
+// intentionally bypass the public booking form's blocked days/dates —
+// a Home Depot recurring pickup should still generate even if the
+// weekday is paused for public bookings.
+export function computeScheduleDates(schedule, fromDate, throughDate) {
   if (!schedule?.startDate || schedule.dayOfWeek == null) return []
   const start = new Date(schedule.startDate + 'T12:00:00')
   if (isNaN(start.getTime())) return []
 
-  const step = stepDays(schedule.frequency)
   const targetDay = Number(schedule.dayOfWeek)
+  const dates = []
+
+  if (schedule.frequency === 'nth-weekday') {
+    const weekOfMonth = Number(schedule.weekOfMonth) || 1
+    let month = startOfMonth(start)
+    while (month <= throughDate) {
+      const d = nthWeekdayOfMonth(month, targetDay, weekOfMonth)
+      if (d && d >= start && d >= fromDate && d <= throughDate) {
+        dates.push(format(d, 'yyyy-MM-dd'))
+      }
+      month = addMonths(month, 1)
+    }
+    return dates
+  }
+
+  const step = stepDays(schedule.frequency)
   const startDay = start.getDay()
   const offset = (targetDay - startDay + 7) % 7
   let current = addDays(start, offset)
 
-  // Customer recurring schedules are set up internally by staff and
-  // intentionally bypass the public booking form's blocked days/dates —
-  // a Home Depot recurring pickup should still generate even if the
-  // weekday is paused for public bookings.
-  const dates = []
   while (current <= throughDate) {
     if (current >= fromDate) {
       dates.push(format(current, 'yyyy-MM-dd'))
@@ -44,6 +106,22 @@ function computeScheduleDates(schedule, fromDate, throughDate) {
     current = addDays(current, step)
   }
   return dates
+}
+
+// Short label used on booking badges, e.g. "Weekly", "Bi-weekly",
+// "1st Thu monthly". Accepts either a booking doc or a schedule object.
+export function recurringBadgeLabel(source) {
+  const freq = source?.recurringFrequency || source?.frequency || 'weekly'
+  if (freq === 'weekly') return 'Weekly'
+  if (freq === 'biweekly') return 'Bi-weekly'
+  if (freq === 'nth-weekday') {
+    const week = Number(source?.recurringWeekOfMonth ?? source?.weekOfMonth) || 1
+    const day = Number(source?.recurringDayOfWeek ?? source?.dayOfWeek)
+    const ordinal = { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th', '-1': 'Last' }[week] || '1st'
+    const dayName = Number.isInteger(day) ? SHORT_DAY_NAMES[day] : ''
+    return `${ordinal} ${dayName} monthly`.replace(/\s+/g, ' ').trim()
+  }
+  return 'Monthly'
 }
 
 function bookingFromCustomer(customer, customerId, dateStr) {
@@ -63,19 +141,26 @@ function bookingFromCustomer(customer, customerId, dateStr) {
     notes: customer.notes || '',
     status: 'confirmed',
     type: customer.schedule?.type || 'pickup',
+    isBusiness: Boolean(customer.isBusiness),
     customerId,
     customerName: customer.name || '',
     recurringId: customerId,
     recurring: true,
     recurringFrequency: customer.schedule?.frequency || 'weekly',
+    recurringDayOfWeek: Number(customer.schedule?.dayOfWeek ?? 1),
+    recurringWeekOfMonth: Number(customer.schedule?.weekOfMonth ?? 1),
     manualEntry: true,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   }
 }
 
+// Only the bookings generated by this customer's recurring schedule carry
+// recurringId === customerId. One-off bookings created from a saved
+// customer carry customerId but no recurringId, so regenerating or
+// deleting the schedule never touches them.
 async function getCustomerBookings(customerId) {
-  const q = query(collection(db, 'bookings'), where('customerId', '==', customerId))
+  const q = query(collection(db, 'bookings'), where('recurringId', '==', customerId))
   const snap = await getDocs(q)
   return snap
 }
@@ -199,12 +284,16 @@ export function computeNextPickupDate(schedule, bookingSettings) {
 export function scheduleSummary(schedule) {
   if (!schedule?.active) return 'Inactive'
   const day = DAY_NAMES[schedule.dayOfWeek] || 'Monday'
+  const type = schedule.type === 'delivery' ? 'delivery' : 'pickup'
+  if (schedule.frequency === 'nth-weekday') {
+    const week = WEEK_OF_MONTH_OPTIONS.find((w) => w.value === Number(schedule.weekOfMonth))
+    return `${week?.label || 'First'} ${day} of every month — ${type}`
+  }
   const freq =
     schedule.frequency === 'weekly'
       ? 'Every'
       : schedule.frequency === 'biweekly'
       ? 'Every other'
-      : 'Monthly on'
-  const type = schedule.type === 'delivery' ? 'delivery' : 'pickup'
+      : 'Every 4 weeks on'
   return `${freq} ${day} — ${type}`
 }

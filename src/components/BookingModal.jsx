@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import StatusBadge from './StatusBadge'
 import { TRUCKS, truckLabel, truckBadgeClasses } from '../utils/trucks'
+import { FREQUENCY_OPTIONS, recurringBadgeLabel } from '../utils/customerBookings'
 
 export default function BookingModal({ booking, onClose, onUpdateStatus, onDelete, onApprove, onDeny }) {
   const [editing, setEditing] = useState(false)
@@ -188,7 +189,7 @@ export default function BookingModal({ booking, onClose, onUpdateStatus, onDelet
                   {booking.recurring && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
                       <Repeat className="h-3 w-3" />
-                      {booking.recurringFrequency === 'weekly' ? 'Weekly' : booking.recurringFrequency === 'biweekly' ? 'Bi-weekly' : 'Monthly'}
+                      {recurringBadgeLabel(booking)}
                     </span>
                   )}
                   {booking.truck && (
@@ -342,9 +343,9 @@ export default function BookingModal({ booking, onClose, onUpdateStatus, onDelet
                     onChange={handleEditChange}
                     className="input-field"
                   >
-                    <option value="weekly">Weekly</option>
-                    <option value="biweekly">Every 2 Weeks</option>
-                    <option value="monthly">Monthly (every 4 weeks)</option>
+                    {FREQUENCY_OPTIONS.map((f) => (
+                      <option key={f.value} value={f.value}>{f.label}</option>
+                    ))}
                   </select>
                 </div>
               )}
